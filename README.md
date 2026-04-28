@@ -389,6 +389,7 @@ npm install
 ```bash
 # Standard (erreichbar im lokalen Netzwerk)
 npm run dev
+```
 
 ### PWA-Icons generieren
 
