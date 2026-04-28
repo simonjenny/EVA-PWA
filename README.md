@@ -13,7 +13,6 @@ Beispielinstallation : https://departure.b65.ch
 ## Inhaltsverzeichnis
 
 - [Features](#features)
-- [Screenshots & UI](#screenshots--ui)
 - [Technologie-Stack](#technologie-stack)
 - [Projektstruktur](#projektstruktur)
 - [Architektur & Datenfluss](#architektur--datenfluss)
