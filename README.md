@@ -53,7 +53,6 @@ Beispielinstallation : https://departure.b65.ch
 | PWA | vite-plugin-pwa | ^0.20 |
 | CSS | Tailwind CSS | ^3.4 |
 | PostCSS | autoprefixer | ^10 |
-| Deployment | rsync + dotenv-cli | – |
 
 ---
 
