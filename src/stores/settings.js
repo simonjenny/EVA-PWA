@@ -4,6 +4,7 @@ import { ref, watch } from 'vue'
 const STORAGE_KEY = 'abfahrten-v1'
 const DARK_MODE_KEY = 'abfahrten-darkmode-v1'
 const REFRESH_KEY = 'abfahrten-refresh-v1'
+const HOME_STOP_KEY = 'abfahrten-homestop-v1'
 
 function generateId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -26,6 +27,16 @@ export const useSettingsStore = defineStore('settings', () => {
   const darkMode = ref(localStorage.getItem(DARK_MODE_KEY) === 'true')
   const refreshInterval = ref(Number(localStorage.getItem(REFRESH_KEY)) || 30)
 
+  // Heimhaltestelle: { id, stopId, stopName, lat, lon }
+  const homeStop = ref((() => {
+    try { return JSON.parse(localStorage.getItem(HOME_STOP_KEY)) } catch { return null }
+  })())
+
+  watch(homeStop, (val) => {
+    if (val) localStorage.setItem(HOME_STOP_KEY, JSON.stringify(val))
+    else localStorage.removeItem(HOME_STOP_KEY)
+  }, { deep: true })
+
   watch(stops, (val) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(val))
   }, { deep: true })
@@ -42,12 +53,14 @@ export const useSettingsStore = defineStore('settings', () => {
     darkMode.value = !darkMode.value
   }
 
-  function addStop(stopId, stopName) {
+  function addStop(stopId, stopName, lat = null, lon = null) {
     if (stops.value.some(s => s.stopId === stopId)) return
     stops.value.push({
       id: generateId(),
       stopId,
       stopName,
+      lat,
+      lon,
       filters: []
     })
   }
@@ -72,5 +85,18 @@ export const useSettingsStore = defineStore('settings', () => {
     stop.filters = stop.filters.filter(f => f.id !== filterId)
   }
 
-  return { stops, darkMode, refreshInterval, addStop, removeStop, addFilter, removeFilter, toggleDarkMode }
+  function setHomeStop(stop) {
+    homeStop.value = stop  // { id, stopId, stopName, lat, lon } oder null
+  }
+
+  function clearAll() {
+    stops.value = []
+  }
+
+  function setStopCoords(stopId, lat, lon) {
+    const stop = stops.value.find(s => s.stopId === stopId)
+    if (stop) { stop.lat = lat; stop.lon = lon }
+  }
+
+  return { stops, darkMode, refreshInterval, homeStop, addStop, removeStop, addFilter, removeFilter, toggleDarkMode, setStopCoords, setHomeStop, clearAll }
 })

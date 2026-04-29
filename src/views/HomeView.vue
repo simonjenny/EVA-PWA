@@ -1,14 +1,61 @@
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useSettingsStore } from '../stores/settings.js'
-import { getDepartures, filterDepartures } from '../services/efa.js'
+import { getDepartures, filterDepartures, resolveStopCoords } from '../services/efa.js'
 import StopCard from '../components/StopCard.vue'
 
 const store = useSettingsStore()
-
-// Pro Stop: { departures, fetchedAt, loading, error }
 const stopData = ref({})
 let refreshTimer = null
+let geoWatcher = null
+
+const userLat = ref(null)
+const userLon = ref(null)
+const gpsStatus = ref('pending') // 'pending' | 'ok' | 'denied'
+
+function startGeoWatch() {
+  if (!navigator.geolocation) { gpsStatus.value = 'denied'; return }
+  if (geoWatcher !== null) return
+  geoWatcher = navigator.geolocation.watchPosition(
+    pos => {
+      userLat.value = pos.coords.latitude
+      userLon.value = pos.coords.longitude
+      gpsStatus.value = 'ok'
+    },
+    () => { gpsStatus.value = 'denied' },
+    { enableHighAccuracy: false, maximumAge: 60000 }
+  )
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+async function ensureStopCoords() {
+  await Promise.all(
+    store.stops
+      .filter(s => s.lat == null || s.lon == null)
+      .map(async s => {
+        const coords = await resolveStopCoords(s.stopId)
+        if (coords) store.setStopCoords(s.stopId, coords.lat, coords.lon)
+      })
+  )
+}
+
+const sortedStops = computed(() => {
+  if (userLat.value === null || userLon.value === null) return store.stops
+  return [...store.stops].sort((a, b) => {
+    if (a.lat == null || a.lon == null) return 1
+    if (b.lat == null || b.lon == null) return -1
+    return haversineKm(userLat.value, userLon.value, a.lat, a.lon)
+         - haversineKm(userLat.value, userLon.value, b.lat, b.lon)
+  })
+})
 
 async function fetchStop(stop) {
   if (!stopData.value[stop.id]) {
@@ -16,13 +63,12 @@ async function fetchStop(stop) {
   }
   stopData.value[stop.id].loading = true
   stopData.value[stop.id].error = null
-
   try {
     const all = await getDepartures(stop.stopId)
     const filtered = filterDepartures(all, stop.filters)
-    stopData.value[stop.id].departures = filtered.slice(0, 2)
+    stopData.value[stop.id].departures = filtered.slice(0, 6)
     stopData.value[stop.id].fetchedAt = Date.now()
-  } catch (e) {
+  } catch {
     stopData.value[stop.id].error = 'Verbindungsfehler – bitte prüfe deine Verbindung'
   } finally {
     stopData.value[stop.id].loading = false
@@ -33,21 +79,26 @@ const isLoading = ref(false)
 
 async function refreshAll() {
   isLoading.value = true
+  await ensureStopCoords()
   await Promise.all(store.stops.map(fetchStop))
   isLoading.value = false
 }
 
 onMounted(() => {
+  startGeoWatch()
   refreshAll()
   refreshTimer = setInterval(refreshAll, store.refreshInterval * 1000)
 })
 
-watch(() => store.refreshInterval, (val) => {
+watch(() => store.refreshInterval, val => {
   clearInterval(refreshTimer)
   refreshTimer = setInterval(refreshAll, val * 1000)
 })
 
-onUnmounted(() => clearInterval(refreshTimer))
+onUnmounted(() => {
+  clearInterval(refreshTimer)
+  if (geoWatcher !== null) navigator.geolocation?.clearWatch(geoWatcher)
+})
 </script>
 
 <template>
@@ -66,7 +117,6 @@ onUnmounted(() => clearInterval(refreshTimer))
         </svg>
       </button>
     </div>
-
     <!-- Leer-Zustand -->
     <div v-if="store.stops.length === 0" class="flex flex-col items-center mt-20 gap-4 text-center">
       <svg width="56" height="56" viewBox="0 0 24 24" fill="none" class="text-ios-secondary opacity-50">
@@ -88,13 +138,14 @@ onUnmounted(() => clearInterval(refreshTimer))
     <!-- Haltestellen-Karten -->
     <div v-else class="flex flex-col gap-4">
       <StopCard
-        v-for="stop in store.stops"
+        v-for="stop in sortedStops"
         :key="stop.id"
         :stop="stop"
         :departures="stopData[stop.id]?.departures ?? []"
         :fetched-at="stopData[stop.id]?.fetchedAt ?? null"
         :loading="stopData[stop.id]?.loading ?? true"
         :error="stopData[stop.id]?.error ?? null"
+        :distance-km="(userLat !== null && userLon !== null && stop.lat != null && stop.lon != null) ? haversineKm(userLat, userLon, stop.lat, stop.lon) : null"
       />
     </div>
   </div>

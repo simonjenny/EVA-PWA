@@ -8,6 +8,79 @@ function ensureArray(val) {
   return Array.isArray(val) ? val : [val]
 }
 
+// EFA gibt bei 1 Treffer { point: {...} } zurück, bei mehreren [{...}, ...]
+// Diese Funktion normalisiert immer zu einem flachen Array von Stop-Objekten
+function normalizePoints(points) {
+  if (!points) return []
+  // Einzeltreffer: { point: { anyType, ref, ... } }
+  if (points.point) return ensureArray(points.point)
+  return ensureArray(points)
+}
+
+/**
+ * Löst Koordinaten für eine bekannte stopId auf.
+ * Gibt { lat, lon } oder null zurück.
+ */
+export async function resolveStopCoords(stopId) {
+  const params = new URLSearchParams({
+    outputFormat: 'JSON',
+    type_dm: 'stop',
+    name_dm: stopId,
+    mode: 'direct',
+    limit: '1',
+    coordOutputFormat: 'WGS84[DD.DDDDD]'
+  })
+  try {
+    const res = await fetch(`https://www.efa-bw.de/bvb3/XML_DM_REQUEST?${params}`)
+    if (!res.ok) return null
+    const data = await res.json()
+    const coord = data.dm?.points?.point?.ref?.coords || ''
+    const [lonStr, latStr] = typeof coord === 'string' ? coord.split(',') : []
+    const lat = latStr ? parseFloat(latStr) : null
+    const lon = lonStr ? parseFloat(lonStr) : null
+    if (lat && lon && !isNaN(lat) && !isNaN(lon)) return { lat, lon }
+  } catch { /* ignorieren */ }
+  return null
+}
+
+/**
+ * Findet die nächstgelegene Haltestelle zu Koordinaten via XML_COORD_REQUEST
+ */
+export async function findNearestStop(lat, lon) {
+  const params = new URLSearchParams({
+    outputFormat: 'JSON',
+    coord: `${lon.toFixed(6)}:${lat.toFixed(6)}:WGS84`,
+    coordOutputFormat: 'WGS84[DD.DDDDD]',
+    type_1: 'STOP',
+    radius_1: '1000',
+    max_1: '5',
+    inclFilter: '1'
+  })
+
+  const res = await fetch(`https://www.efa-bw.de/bvb3/XML_COORD_REQUEST?${params}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+  const data = await res.json()
+  const pins = ensureArray(data.pins)
+  const stop = pins.find(p => p.type === 'STOP')
+  if (!stop) return null
+
+  const attrs = Object.fromEntries(
+    ensureArray(stop.attrs).map(a => [a.name, a.value])
+  )
+  const fullName = attrs['STOP_NAME_WITH_PLACE'] || `${stop.locality ? stop.locality + ', ' : ''}${stop.desc}`
+
+  // coords = "lon,lat"
+  const [lonStr, latStr] = typeof stop.coords === 'string' ? stop.coords.split(',') : []
+  return {
+    id: stop.stateless || stop.id,
+    name: fullName,
+    place: stop.locality || '',
+    lat: latStr ? parseFloat(latStr) : null,
+    lon: lonStr ? parseFloat(lonStr) : null
+  }
+}
+
 /**
  * Sucht Haltestellen über XSLT_STOPFINDER_REQUEST
  */
@@ -27,15 +100,58 @@ export async function searchStops(query) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
   const data = await res.json()
-  const points = ensureArray(data.stopFinder?.points)
+  const points = normalizePoints(data.stopFinder?.points)
 
   return points
     .filter(p => p.anyType === 'stop')
-    .map(p => ({
-      id: p.ref?.id || p.stateless,
-      name: p.name,
-      place: p.mainLoc || p.ref?.place || ''
-    }))
+    .map(p => {
+      const coord = p.ref?.coords || p.coords || ''
+      const [lonStr, latStr] = typeof coord === 'string' ? coord.split(',') : []
+      const lat = latStr ? parseFloat(latStr) : null
+      const lon = lonStr ? parseFloat(lonStr) : null
+      return {
+        id: p.ref?.id || p.stateless,
+        name: p.name,
+        place: p.mainLoc || p.ref?.place || '',
+        lat: lat && !isNaN(lat) ? lat : null,
+        lon: lon && !isNaN(lon) ? lon : null
+      }
+    })
+}
+
+/**
+ * Plant eine Reise via XSLT_TRIP_REQUEST2
+ * @param {string} originId - Stop-ID (ref.id) der Starthaltestelle
+ * @param {string} destinationId - Stop-ID (ref.id) der Zielhaltestelle
+ * @param {Date} dateTime - Datum und Uhrzeit
+ * @param {'dep'|'arr'} depArr - 'dep' = Abfahrt, 'arr' = Ankunft
+ * @returns {Promise<Array>} - Array von Trip-Verbindungen
+ */
+export async function planTrip(originId, destinationId, dateTime, depArr = 'dep') {
+  const pad = n => String(n).padStart(2, '0')
+  const dateStr = `${dateTime.getFullYear()}${pad(dateTime.getMonth() + 1)}${pad(dateTime.getDate())}`
+  const timeStr = `${pad(dateTime.getHours())}${pad(dateTime.getMinutes())}`
+
+  const params = new URLSearchParams({
+    outputFormat: 'JSON',
+    language: 'de',
+    sessionID: '0',
+    type_origin: 'stop',
+    name_origin: originId,
+    type_destination: 'stop',
+    name_destination: destinationId,
+    itdDate: dateStr,
+    itdTime: timeStr,
+    itdTripDateTimeDepArr: depArr
+  })
+
+  const res = await fetch(`${BASE_URL}/XSLT_TRIP_REQUEST2?${params}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+  const data = await res.json()
+  const trips = data.trips
+  if (!trips) return []
+  return Array.isArray(trips) ? trips : [trips]
 }
 
 /**
