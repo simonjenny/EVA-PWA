@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { searchStops, planTrip, findNearestStop } from '../services/efa.js'
 import { useSettingsStore } from '../stores/settings.js'
@@ -433,6 +433,23 @@ function getLegDisruptions(leg) {
 function hasDisruptions(trip) {
   return getLegs(trip).some(leg => getLegDisruptions(leg).length > 0)
 }
+
+function parseTripDepDate(trip) {
+  const dt = getTripDep(trip)
+  if (!dt?.time || !dt?.date) return null
+  // date format: "DD.MM.YYYY", time: "HH:MM"
+  const [day, month, year] = dt.date.split('.')
+  const [hour, minute] = dt.time.split(':')
+  return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute))
+}
+
+const filteredTrips = computed(() => {
+  const now = new Date()
+  return trips.value.filter(trip => {
+    const dep = parseTripDepDate(trip)
+    return dep === null || dep >= now
+  })
+})
 </script>
 
 <template>
@@ -601,7 +618,7 @@ function hasDisruptions(trip) {
       </div>
 
       <!-- Keine Ergebnisse -->
-      <div v-else-if="searched && !loading && trips.length === 0" class="text-center text-ios-secondary py-12">
+      <div v-else-if="searched && !loading && filteredTrips.length === 0" class="text-center text-ios-secondary py-12">
         <svg class="w-12 h-12 mx-auto mb-3 opacity-40" viewBox="0 0 24 24" fill="none">
           <circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.5"/>
           <path d="M8 12h8M12 8v8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -612,7 +629,7 @@ function hasDisruptions(trip) {
       <!-- Trip-Karten -->
       <div v-else class="flex flex-col gap-3">
         <button
-          v-for="(trip, idx) in trips"
+          v-for="(trip, idx) in filteredTrips"
           :key="idx"
           @click="openDetail(trip)"
           class="w-full text-left bg-white dark:bg-ios-dark-card rounded-2xl shadow-sm border border-ios-separator dark:border-ios-dark-separator overflow-hidden active:opacity-70 transition-opacity"
@@ -638,7 +655,7 @@ function hasDisruptions(trip) {
             <!-- Dauer + Umstiege -->
             <div class="text-right flex-shrink-0">
               <div class="flex items-center justify-end gap-2">
-                <svg v-if="tripsWithDisruption.has(idx)" width="15" height="15" viewBox="0 0 24 24" fill="none" class="text-yellow-500 flex-shrink-0 -translate-y-px">
+                <svg v-if="hasDisruptions(trip)" width="15" height="15" viewBox="0 0 24 24" fill="none" class="text-yellow-500 flex-shrink-0 -translate-y-px">
                   <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                   <line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                   <line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>

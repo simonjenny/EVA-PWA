@@ -452,7 +452,7 @@ function toggleLine(stop, line, direction) {
         </div>
       </div>
       <p v-if="store.stops.length === 0" class="text-center text-ios-secondary text-sm mt-2">
-        Suche nach einer Haltestelle.
+        Suche nach einer Haltestelle um sie den Abfahrten hinzuzufügen.
       </p>
     </div>
 

@@ -131,7 +131,7 @@ onUnmounted(() => {
         to="/settings"
         class="text-ios-blue font-medium text-base"
       >
-        Zur Einstellungen →
+        Zu den Einstellungen →
       </router-link>
     </div>
 
