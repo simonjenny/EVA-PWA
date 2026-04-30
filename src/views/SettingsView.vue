@@ -210,15 +210,8 @@ function toggleLine(stop, line, direction) {
 
 <template>
   <div class="px-4 pb-10" style="padding-top: calc(env(safe-area-inset-top, 0px) + 16px);">
-    <div class="flex items-center justify-between gap-4 mb-6">
+    <div class="mb-6">
       <h1 class="text-3xl font-bold text-ios-dark dark:text-white tracking-tight">Einstellungen</h1>
-      <button
-        @click="forceReload"
-        class="text-ios-blue text-sm font-medium py-2 px-3 rounded-xl border border-ios-blue/10 transition hover:bg-ios-blue/5"
-        type="button"
-      >
-        Aktualisieren
-      </button>
     </div>
 
     <!-- ══ SEKTION: ALLGEMEIN ══ -->
@@ -239,24 +232,6 @@ function toggleLine(stop, line, direction) {
             class="absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200"
             :class="store.darkMode ? 'translate-x-5' : 'translate-x-0'"
           />
-        </button>
-      </div>
-    </div>
-
-    <!-- Aktualisierungsintervall -->
-    <div class="bg-white dark:bg-ios-dark-card rounded-2xl overflow-hidden mb-6" style="box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
-      <div class="px-4 py-3 border-b border-gray-100 dark:border-ios-dark-separator">
-        <p class="text-xs font-medium text-ios-secondary uppercase tracking-wide">Automatisch aktualisieren</p>
-      </div>
-      <div class="flex items-center px-4 divide-x divide-gray-100 dark:divide-ios-dark-separator">
-        <button
-          v-for="option in [15, 30, 60, 120]"
-          :key="option"
-          @click="store.refreshInterval = option"
-          class="flex-1 py-3 text-sm font-medium transition-colors"
-          :class="store.refreshInterval === option ? 'text-ios-blue' : 'text-ios-secondary'"
-        >
-          {{ option >= 60 ? `${option / 60} min` : `${option} s` }}
         </button>
       </div>
     </div>
@@ -331,6 +306,24 @@ function toggleLine(stop, line, direction) {
 
     <!-- ══ SEKTION: ABFAHRTEN ══ -->
     <p class="text-xs font-semibold text-ios-secondary uppercase tracking-wide px-1 mb-2">Abfahrten</p>
+
+    <!-- Aktualisierungsintervall -->
+    <div class="bg-white dark:bg-ios-dark-card rounded-2xl overflow-hidden mb-4" style="box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+      <div class="px-4 py-3 border-b border-gray-100 dark:border-ios-dark-separator">
+        <p class="text-xs font-medium text-ios-secondary uppercase tracking-wide">Automatisch aktualisieren</p>
+      </div>
+      <div class="flex items-center px-4 divide-x divide-gray-100 dark:divide-ios-dark-separator">
+        <button
+          v-for="option in [15, 30, 60, 120]"
+          :key="option"
+          @click="store.refreshInterval = option"
+          class="flex-1 py-3 text-sm font-medium transition-colors"
+          :class="store.refreshInterval === option ? 'text-ios-blue' : 'text-ios-secondary'"
+        >
+          {{ option >= 60 ? `${option / 60} min` : `${option} s` }}
+        </button>
+      </div>
+    </div>
 
     <!-- Suchfeld für Abfahrts-Haltestellen -->
     <div class="bg-white dark:bg-ios-dark-card rounded-2xl overflow-hidden mb-4" style="box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
@@ -411,8 +404,7 @@ function toggleLine(stop, line, direction) {
           <span
             v-for="f in stop.filters"
             :key="f.id"
-            class="inline-flex items-center gap-1 text-xs rounded-lg pl-1.5 pr-2 py-1"
-            :style="{ backgroundColor: getLineStyle({ number: f.line }).bg + '20', color: getLineStyle({ number: f.line }).bg }"
+            class="inline-flex items-center gap-1 text-xs rounded-lg pl-1.5 pr-2 py-1 bg-gray-100 dark:bg-ios-dark-elevated text-ios-label dark:text-white"
           >
             <span class="text-[11px] font-bold px-1.5 py-0.5 rounded-md" :style="{ backgroundColor: getLineStyle({ number: f.line }).bg, color: getLineStyle({ number: f.line }).text }">{{ f.line || '?' }}</span>
             <span class="truncate max-w-[120px]">{{ f.direction }}</span>
@@ -491,6 +483,19 @@ function toggleLine(stop, line, direction) {
           </div>
         </button>
       </div>
+    </div>
+
+    <!-- ══ SEKTION: UPDATE ══ -->
+    <p class="text-xs font-semibold text-ios-secondary uppercase tracking-wide px-1 mb-2">Update</p>
+    <div class="bg-white dark:bg-ios-dark-card rounded-2xl overflow-hidden mb-6" style="box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+      <button @click="forceReload" class="w-full flex items-center px-4 py-3.5 active:bg-ios-gray dark:active:bg-ios-dark-elevated text-left gap-3">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" class="text-ios-blue flex-shrink-0">
+          <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div>
+          <p class="text-sm font-medium text-ios-dark dark:text-white">App aktualisieren</p>
+        </div>
+      </button>
     </div>
 
     <!-- ── QR-Export Modal ── -->

@@ -1,6 +1,7 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { getLineStyle } from '../utils/lineColors.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -81,15 +82,16 @@ function getLegModeLabel(leg) {
   return 'Linie'
 }
 
-function getLegColor(leg) {
+function getLegStyle(leg) {
   const mode = getLegMode(leg)
-  if (mode === 'walk') return '#8E8E93'
-  if (mode === 'train') return '#FF3B30'
-  if (mode === 'suburban') return '#34C759'
-  if (mode === 'subway') return '#5856D6'
-  if (mode === 'tram') return '#FF9500'
-  return '#007AFF'
+  if (mode === 'walk') return { bg: '#8E8E93', text: '#fff' }
+  const number = leg.mode?.number || leg.mode?.name || ''
+  const t = parseInt(leg.mode?.type ?? '5')
+  const motTypeMap = { 1: 13, 2: 0, 3: 5, 4: 4, 5: 5, 6: 2, 7: 6 }
+  const motType = motTypeMap[t] ?? 5
+  return getLineStyle({ number, motType })
 }
+function getLegColor(leg) { return getLegStyle(leg).bg }
 
 function isWalkLeg(leg) {
   return getLegMode(leg) === 'walk'
@@ -107,21 +109,31 @@ function getLegDirection(leg) {
   return leg.mode?.destination || null
 }
 
+function decodeHtml(str) {
+  return (str || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&auml;/g, 'ä').replace(/&ouml;/g, 'ö').replace(/&uuml;/g, 'ü')
+    .replace(/&Auml;/g, 'Ä').replace(/&Ouml;/g, 'Ö').replace(/&Uuml;/g, 'Ü')
+    .replace(/&szlig;/g, 'ß').replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ').trim()
+}
+
 function getLegDisruptions(leg) {
   const result = []
-  // leg.infos.info (echte Störungsmeldungen)
+  // leg.infos kann ein Array sein ODER { info: [...] }
   const infos = leg.infos
   if (infos) {
-    const raw = infos.info
-    const list = raw ? (Array.isArray(raw) ? raw : [raw]) : []
+    let list = []
+    if (Array.isArray(infos)) {
+      list = infos
+    } else if (infos.info) {
+      list = Array.isArray(infos.info) ? infos.info : [infos.info]
+    }
     for (const info of list) {
       const txt = info.infoText
-      if (txt) {
-        result.push({
-          title: txt.subtitle || txt.subject || info.infoLinkText || 'Störung',
-          text: (txt.content || txt.additionalText || '').replace(/<[^>]*>/g, ' ').replace(/&auml;/g,'ä').replace(/&ouml;/g,'ö').replace(/&uuml;/g,'ü').replace(/&Auml;/g,'Ä').replace(/&Ouml;/g,'Ö').replace(/&Uuml;/g,'Ü').replace(/&szlig;/g,'ß').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim()
-        })
-      }
+      const title = txt?.subtitle || txt?.subject || info.infoLinkText || info.subtitle || info.subject || 'Störung'
+      const rawText = txt?.content || txt?.additionalText || info.content || info.additionalText || ''
+      result.push({ title, text: decodeHtml(rawText) })
     }
   }
   // leg.hints.hint (type != Timetable = Störung)
@@ -135,7 +147,14 @@ function getLegDisruptions(leg) {
       }
     }
   }
-  return result
+  // Duplikate entfernen (gleicher Titel + Text)
+  const seen = new Set()
+  return result.filter(d => {
+    const key = d.title + '|' + d.text
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function getIntermediateStops(leg) {
@@ -161,13 +180,15 @@ function toggleStops(idx) {
 }
 
 const legs = computed(() => trip.value ? getLegs(trip.value) : [])
+
+onMounted(() => nextTick(() => window.scrollTo({ top: 0, behavior: 'instant' })))
 </script>
 
 <template>
   <div class="min-h-screen bg-ios-bg dark:bg-ios-dark-bg pb-24">
     <!-- Header -->
     <div
-      class="bg-white dark:bg-ios-dark-card border-b border-ios-separator dark:border-ios-dark-separator px-4 pb-4"
+      class="sticky top-0 z-20 bg-white dark:bg-ios-dark-card border-b border-ios-separator dark:border-ios-dark-separator px-4 pb-4"
       style="padding-top: calc(env(safe-area-inset-top, 0px) + 16px);"
     >
       <div class="flex items-center gap-3 mb-1">
@@ -261,8 +282,8 @@ const legs = computed(() => trip.value ? getLegs(trip.value) : [])
             <div class="flex-1 pl-3 py-2">
               <div class="flex items-center gap-2 flex-wrap">
                 <span
-                  class="text-[13px] font-bold px-2.5 py-1 rounded-lg text-white flex-shrink-0"
-                  :style="{ backgroundColor: getLegColor(leg) }"
+                  class="text-[13px] font-bold px-2.5 py-1 rounded-lg flex-shrink-0"
+                  :style="{ backgroundColor: getLegStyle(leg).bg, color: getLegStyle(leg).text }"
                 >{{ getLegLine(leg) }}</span>
                 <span class="text-[14px] font-semibold text-ios-label dark:text-white">{{ getLegModeLabel(leg) }}</span>
                 <span v-if="getLegDirection(leg)" class="text-[13px] text-ios-secondary">→ {{ getLegDirection(leg) }}</span>

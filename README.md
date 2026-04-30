@@ -6,7 +6,7 @@ Eine Progressive Web App (PWA) für Echtzeit-Abfahrtszeiten des öffentlichen Na
 
 ## Inhaltsverzeichnis
 
-Beispielinstallation : https://departure.b65.ch
+Beispielinstallation : https://ov.b65.ch
 
 ---
 

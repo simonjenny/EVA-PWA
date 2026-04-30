@@ -3,6 +3,7 @@ import { ref, watch, onMounted } from 'vue'
 import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { searchStops, planTrip, findNearestStop } from '../services/efa.js'
 import { useSettingsStore } from '../stores/settings.js'
+import { getLineStyle } from '../utils/lineColors.js'
 
 const router = useRouter()
 const settingsStore = useSettingsStore()
@@ -156,11 +157,17 @@ const error = ref(null)
 const searched = ref(false)
 
 // Zustand aus sessionStorage wiederherstellen (nach Back-Navigation)
+function legHasInfos(leg) {
+  if (!leg.infos) return false
+  if (Array.isArray(leg.infos)) return leg.infos.length > 0
+  return !!(leg.infos.info)
+}
+
 function propagateInfos(result) {
   const lineInfoMap = new Map()
   for (const trip of result) {
     for (const leg of getLegs(trip)) {
-      if (leg.infos?.info) {
+      if (legHasInfos(leg)) {
         const key = leg.mode?.number || leg.mode?.name
         if (key && !lineInfoMap.has(key)) lineInfoMap.set(key, leg.infos)
       }
@@ -169,7 +176,7 @@ function propagateInfos(result) {
   if (lineInfoMap.size > 0) {
     for (const trip of result) {
       for (const leg of getLegs(trip)) {
-        if (!leg.infos?.info) {
+        if (!legHasInfos(leg)) {
           const key = leg.mode?.number || leg.mode?.name
           if (key && lineInfoMap.has(key)) leg.infos = lineInfoMap.get(key)
         }
@@ -182,8 +189,7 @@ function propagateInfos(result) {
 function computeDisruptions(result) {
   const set = new Set()
   result.forEach((trip, i) => {
-    const legs = getLegs(trip)
-    if (legs.some(leg => (leg.infos && leg.infos.info))) set.add(i)
+    if (getLegs(trip).some(leg => legHasInfos(leg))) set.add(i)
   })
   tripsWithDisruption.value = set
 }
@@ -360,15 +366,16 @@ onBeforeRouteLeave((to) => {
   }
 })
 
-function getLegColor(leg) {
+function getLegStyle(leg) {
   const mode = getLegMode(leg)
-  if (mode === 'walk') return '#8E8E93'
-  if (mode === 'train') return '#FF3B30'
-  if (mode === 'suburban') return '#34C759'
-  if (mode === 'subway') return '#5856D6'
-  if (mode === 'tram') return '#FF9500'
-  return '#007AFF'
+  if (mode === 'walk') return { bg: '#8E8E93', text: '#fff' }
+  const number = leg.mode?.number || leg.mode?.name || ''
+  const t = parseInt(leg.mode?.type ?? '5')
+  const motTypeMap = { 1: 13, 2: 0, 3: 5, 4: 4, 5: 5, 6: 2, 7: 6 }
+  const motType = motTypeMap[t] ?? 5
+  return getLineStyle({ number, motType })
 }
+function getLegColor(leg) { return getLegStyle(leg).bg }
 
 function isWalkLeg(leg) {
   return getLegMode(leg) === 'walk'
@@ -386,16 +393,20 @@ function stripHtml(str) {
 
 function getLegDisruptions(leg) {
   const result = []
-  // leg.infos.info (echte Störungsmeldungen)
+  // leg.infos kann direkt ein Array sein ODER { info: [...] }
   const infos = leg.infos
   if (infos) {
-    const raw = infos.info
-    const list = raw ? (Array.isArray(raw) ? raw : [raw]) : []
+    let list = []
+    if (Array.isArray(infos)) {
+      list = infos
+    } else if (infos.info) {
+      list = Array.isArray(infos.info) ? infos.info : [infos.info]
+    }
     for (const info of list) {
-      result.push({
-        title: info.infoText?.subtitle || info.infoText?.subject || info.infoLinkText || 'Störung',
-        text: stripHtml(info.infoText?.content || info.infoText?.additionalText || '')
-      })
+      const txt = info.infoText
+      const title = txt?.subtitle || txt?.subject || info.infoLinkText || info.subtitle || info.subject || 'Störung'
+      const rawText = txt?.content || txt?.additionalText || info.content || info.additionalText || ''
+      result.push({ title, text: stripHtml(rawText) })
     }
   }
   // leg.hints.hint (type != Timetable = Störung)
@@ -409,17 +420,18 @@ function getLegDisruptions(leg) {
       }
     }
   }
-  return result
+  // Duplikate entfernen (gleicher Titel + Text)
+  const seen = new Set()
+  return result.filter(d => {
+    const key = d.title + '|' + d.text
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function hasDisruptions(trip) {
-  return getLegs(trip).some(leg => {
-    if (leg.infos?.info) return true
-    const hint = leg.hints?.hint
-    if (!hint) return false
-    const list = Array.isArray(hint) ? hint : [hint]
-    return list.some(h => h.type && h.type !== 'Timetable' && h.infoText)
-  })
+  return getLegs(trip).some(leg => getLegDisruptions(leg).length > 0)
 }
 </script>
 
@@ -427,7 +439,7 @@ function hasDisruptions(trip) {
   <div class="min-h-screen bg-ios-bg dark:bg-ios-dark-bg pb-24">
     <!-- Header -->
     <div
-      class="bg-white dark:bg-ios-dark-card border-b border-ios-separator dark:border-ios-dark-separator px-4 pb-4"
+      class="sticky top-0 z-20 bg-white dark:bg-ios-dark-card border-b border-ios-separator dark:border-ios-dark-separator px-4 pb-4"
       style="padding-top: calc(env(safe-area-inset-top, 0px) + 16px);"
     >
       <h1 class="text-3xl font-bold text-ios-dark dark:text-white tracking-tight mb-4">Reiseplaner</h1>
@@ -467,16 +479,34 @@ function hasDisruptions(trip) {
           </div>
         </div>
 
-        <!-- Tauschen Button -->
-        <button
-          @click="swapStops"
-          class="absolute right-3 top-1/2 -translate-y-1/2 z-10 w-8 h-8 flex items-center justify-center bg-white dark:bg-ios-dark-card border border-ios-separator dark:border-ios-dark-separator rounded-full shadow-sm active:scale-95 transition-transform"
-          title="Tauschen"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-ios-blue">
-            <path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
+        <!-- Buttons: Tauschen + Nach Hause -->
+        <div class="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex items-center gap-1.5">
+          <button
+            @click="swapStops"
+            class="w-8 h-8 flex items-center justify-center bg-white dark:bg-ios-dark-card border border-ios-separator dark:border-ios-dark-separator rounded-full shadow-sm active:scale-95 transition-transform"
+            title="Tauschen"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-ios-blue">
+              <path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button
+            v-if="settingsStore.homeStop"
+            @click="takeMeHome"
+            :disabled="takeMeHomeLoading"
+            class="w-8 h-8 flex items-center justify-center bg-white dark:bg-ios-dark-card border border-ios-separator dark:border-ios-dark-separator rounded-full shadow-sm active:scale-95 transition-transform disabled:opacity-40"
+            :title="'Nach Hause: ' + settingsStore.homeStop.stopName"
+          >
+            <svg v-if="!takeMeHomeLoading" width="16" height="16" viewBox="0 0 24 24" fill="none" class="text-ios-blue">
+              <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M9 21V13h6v8" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            </svg>
+            <svg v-else class="animate-spin w-3.5 h-3.5 text-ios-blue" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+            </svg>
+          </button>
+        </div>
 
         <!-- Nach -->
         <div class="relative px-3 py-2.5">
@@ -491,22 +521,7 @@ function hasDisruptions(trip) {
               autocorrect="off"
               spellcheck="false"
             />
-            <button
-              v-if="settingsStore.homeStop && !destSelected"
-              @click="takeMeHome"
-              :disabled="takeMeHomeLoading"
-              class="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full bg-ios-blue/10 text-ios-blue active:bg-ios-blue/20 transition-colors disabled:opacity-40"
-              :title="'Nach Hause: ' + settingsStore.homeStop.stopName"
-            >
-              <svg v-if="!takeMeHomeLoading" width="15" height="15" viewBox="0 0 24 24" fill="none">
-                <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                <path d="M9 21V13h6v8" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-              </svg>
-              <svg v-else class="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-              </svg>
-            </button>
+
           </div>
           <div v-if="destSearching" class="absolute right-3 top-1/2 -translate-y-1/2">
             <svg class="animate-spin w-4 h-4 text-ios-secondary" viewBox="0 0 24 24" fill="none">
@@ -656,8 +671,8 @@ function hasDisruptions(trip) {
               <!-- Transit -->
               <div v-else class="flex items-center gap-1.5">
                 <span
-                  class="px-2 py-0.5 rounded-md text-white text-[13px] font-bold"
-                  :style="{ backgroundColor: getLegColor(leg) }"
+                  class="px-2 py-0.5 rounded-md text-[13px] font-bold"
+                  :style="{ backgroundColor: getLegStyle(leg).bg, color: getLegStyle(leg).text }"
                 >{{ getLegLine(leg) || '?' }}</span>
                 <span class="text-[13px] text-ios-label dark:text-white font-medium">{{ getLegModeLabel(leg) }}</span>
               </div>
