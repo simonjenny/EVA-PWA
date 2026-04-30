@@ -347,9 +347,17 @@ function getLegModeLabel(leg) {
 }
 
 function openDetail(trip) {
+  const legs = getLegs(trip)
+  const depDt = legs.length ? getLegDep(legs[0])?.dateTime : null
   router.push({
     path: '/trip/detail',
-    query: { data: encodeURIComponent(JSON.stringify(trip)) }
+    query: {
+      data: encodeURIComponent(JSON.stringify(trip)),
+      from: originSelected.value?.id,
+      to: destSelected.value?.id,
+      date: selectedDate.value?.replace(/-/g, ''),
+      dep: depDt?.time?.substring(0, 5) ?? selectedTime.value
+    }
   })
 }
 

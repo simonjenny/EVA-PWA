@@ -2,18 +2,15 @@
 import { computed, ref, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getLineStyle } from '../utils/lineColors.js'
+import { planTrip } from '../services/efa.js'
 
 const route = useRoute()
 const router = useRouter()
 
-// Trip wird als JSON-String via Query-Parameter übergeben
-const trip = computed(() => {
-  try {
-    return JSON.parse(decodeURIComponent(route.query.data || ''))
-  } catch {
-    return null
-  }
-})
+// Trip – entweder aus query.data (Navigation) oder via API re-fetch (Share-Link)
+const trip = ref(null)
+const fetchLoading = ref(false)
+const fetchError = ref(null)
 
 function getLegs(trip) {
   const raw = trip?.legs
@@ -181,7 +178,100 @@ function toggleStops(idx) {
 
 const legs = computed(() => trip.value ? getLegs(trip.value) : [])
 
-onMounted(() => nextTick(() => window.scrollTo({ top: 0, behavior: 'instant' })))
+function goBack() {
+  if (window.history.state?.back) {
+    router.back()
+  } else {
+    router.replace('/trip')
+  }
+}
+
+// ─── Teilen ──────────────────────────────────────────────
+const shareToast = ref(null) // null | 'copied' | 'error'
+
+function buildShareText() {
+  if (!trip.value || !legs.value.length) return ''
+  const dep = getLegDep(legs.value[0])
+  const arr = getLegArr(legs.value[legs.value.length - 1])
+  const from = dep?.name ?? '?'
+  const to = arr?.name ?? '?'
+  const depTime = formatTime(dep?.dateTime)
+  const arrTime = formatTime(arr?.dateTime)
+  const transitLegs = legs.value.filter(l => !isWalkLeg(l))
+  const lines = transitLegs.map(l => getLegLine(l)).filter(Boolean).join(' → ')
+  const depDate = dep?.dateTime?.date ? ` (${dep.dateTime.date})` : ''
+  // Kurze Share-URL aus Minimal-Parametern
+  let shareUrl = ''
+  if (route.query.from && route.query.to && route.query.date && route.query.dep) {
+    const params = new URLSearchParams({
+      from: String(route.query.from),
+      to: String(route.query.to),
+      date: String(route.query.date),
+      dep: String(route.query.dep)
+    })
+    shareUrl = `\n${window.location.origin}/trip/detail?${params}`
+  }
+  return `🚌 ${from} → ${to}${depDate}\n🕐 ${depTime} – ${arrTime} (${formatDuration(trip.value)})${lines ? '\n🔁 ' + lines : ''}${shareUrl}`
+}
+
+async function shareTrip() {
+  const text = buildShareText()
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Reiseverbindung', text })
+    } catch (e) {
+      if (e.name !== 'AbortError') showToast('error')
+    }
+  } else {
+    try {
+      await navigator.clipboard.writeText(text)
+      showToast('copied')
+    } catch {
+      showToast('error')
+    }
+  }
+}
+
+let toastTimer = null
+function showToast(type) {
+  shareToast.value = type
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { shareToast.value = null }, 2500)
+}
+
+onMounted(async () => {
+  nextTick(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+  // Warten bis Router bereit ist (wichtig bei direktem URL-Aufruf / Share-Links)
+  await router.isReady()
+  if (route.query.data) {
+    try {
+      trip.value = JSON.parse(decodeURIComponent(String(route.query.data)))
+    } catch { trip.value = null }
+  } else if (route.query.from && route.query.to) {
+    // Share-Link: Trip neu abrufen
+    fetchLoading.value = true
+    fetchError.value = null
+    try {
+      const dateStr = String(route.query.date || '')
+      const depTime = String(route.query.dep || '00:00')
+      const year = parseInt(dateStr.substring(0, 4))
+      const month = parseInt(dateStr.substring(4, 6))
+      const day = parseInt(dateStr.substring(6, 8))
+      const [hour, minute] = depTime.split(':').map(Number)
+      const dt = new Date(year, month - 1, day, hour, minute)
+      const results = await planTrip(String(route.query.from), String(route.query.to), dt, 'dep')
+      trip.value = results.find(t => {
+        const firstLegs = getLegs(t)
+        if (!firstLegs.length) return false
+        return getLegDep(firstLegs[0])?.dateTime?.time?.substring(0, 5) === depTime
+      }) || results[0] || null
+    } catch {
+      fetchError.value = 'Verbindung konnte nicht geladen werden.'
+    } finally {
+      fetchLoading.value = false
+    }
+  }
+})
 </script>
 
 <template>
@@ -191,9 +281,9 @@ onMounted(() => nextTick(() => window.scrollTo({ top: 0, behavior: 'instant' }))
       class="sticky top-0 z-20 bg-white dark:bg-ios-dark-card border-b border-ios-separator dark:border-ios-dark-separator px-4 pb-4"
       style="padding-top: calc(env(safe-area-inset-top, 0px) + 16px);"
     >
-      <div class="flex items-center gap-3 mb-1">
+      <div class="flex items-center justify-between gap-3 mb-1">
         <button
-          @click="router.back()"
+          @click="goBack()"
           class="text-ios-blue flex items-center gap-1 active:opacity-50 transition-opacity -ml-1"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -201,11 +291,42 @@ onMounted(() => nextTick(() => window.scrollTo({ top: 0, behavior: 'instant' }))
           </svg>
           <span class="text-[17px]">Reiseplaner</span>
         </button>
+        <button
+          v-if="trip"
+          @click="shareTrip"
+          class="text-ios-blue active:opacity-50 transition-opacity p-1 -mr-1"
+          title="Teilen"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <circle cx="18" cy="5" r="3" stroke="currentColor" stroke-width="2"/>
+            <circle cx="6" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+            <circle cx="18" cy="19" r="3" stroke="currentColor" stroke-width="2"/>
+            <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
       <h1 class="text-3xl font-bold text-ios-dark dark:text-white tracking-tight">Reisedetails</h1>
 
+      <!-- Toast -->
+      <transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="opacity-0 translate-y-1"
+        enter-to-class="opacity-100 translate-y-0"
+        leave-active-class="transition duration-200 ease-in"
+        leave-from-class="opacity-100 translate-y-0"
+        leave-to-class="opacity-0 translate-y-1"
+      >
+        <div
+          v-if="shareToast"
+          class="fixed bottom-28 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-full text-[14px] font-semibold text-white shadow-lg"
+          :class="shareToast === 'copied' ? 'bg-ios-dark dark:bg-white dark:text-ios-dark' : 'bg-red-500'"
+        >
+          {{ shareToast === 'copied' ? 'Link kopiert' : 'Teilen fehlgeschlagen' }}
+        </div>
+      </transition>
+
       <!-- Zusammenfassung -->
-      <div v-if="trip" class="mt-3 flex items-center gap-3 text-ios-secondary text-[14px]">
+      <div v-if="trip && legs.length" class="mt-3 flex items-center gap-3 text-ios-secondary text-[14px]">
         <span class="font-semibold text-ios-label dark:text-white text-[18px]">
           {{ formatTime(getLegDep(legs[0])?.dateTime) }}
         </span>
@@ -222,14 +343,28 @@ onMounted(() => nextTick(() => window.scrollTo({ top: 0, behavior: 'instant' }))
       </div>
     </div>
 
+    <!-- Laden (Share-Link) -->
+    <div v-if="fetchLoading" class="flex flex-col items-center justify-center py-20 gap-4 text-ios-secondary">
+      <svg class="animate-spin w-8 h-8" viewBox="0 0 24 24" fill="none">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+      </svg>
+      <p class="text-[15px]">Verbindung wird geladen…</p>
+    </div>
+
+    <!-- Fehler (Share-Link) -->
+    <div v-else-if="fetchError" class="mx-4 mt-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-red-600 dark:text-red-400 text-[14px]">
+      {{ fetchError }}
+    </div>
+
     <!-- Kein Trip -->
-    <div v-if="!trip" class="text-center text-ios-secondary py-16">
+    <div v-else-if="!trip" class="text-center text-ios-secondary py-16">
       <p>Keine Reisedaten verfügbar.</p>
-      <button @click="router.back()" class="mt-4 text-ios-blue">Zurück</button>
+      <button @click="goBack()" class="mt-4 text-ios-blue">Zurück</button>
     </div>
 
     <!-- Leg-Timeline: [Zeit w-12] [Punkt+Linie w-6] [Inhalt flex-1] -->
-    <div v-else class="px-4 pt-5 pb-6">
+    <div v-else-if="trip" class="px-4 pt-5 pb-6">
       <template v-for="(leg, idx) in legs" :key="idx">
 
         <!-- ── Fussweg ── -->
