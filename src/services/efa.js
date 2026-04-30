@@ -102,6 +102,8 @@ export async function searchStops(query) {
   const data = await res.json()
   const points = normalizePoints(data.stopFinder?.points)
 
+  const CH_BOUNDS = { minLat: 45.8, maxLat: 47.85, minLon: 5.95, maxLon: 10.5 }
+
   return points
     .filter(p => p.anyType === 'stop')
     .map(p => {
@@ -117,6 +119,11 @@ export async function searchStops(query) {
         lon: lon && !isNaN(lon) ? lon : null
       }
     })
+    .filter(p =>
+      p.lat !== null && p.lon !== null &&
+      p.lat >= CH_BOUNDS.minLat && p.lat <= CH_BOUNDS.maxLat &&
+      p.lon >= CH_BOUNDS.minLon && p.lon <= CH_BOUNDS.maxLon
+    )
 }
 
 /**

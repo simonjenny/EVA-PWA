@@ -15,11 +15,13 @@ const originQuery = ref('')
 const originResults = ref([])
 const originSelected = ref(null)
 const originSearching = ref(false)
+const originFocused = ref(false)
 
 const destQuery = ref('')
 const destResults = ref([])
 const destSelected = ref(null)
 const destSearching = ref(false)
+const destFocused = ref(false)
 
 let originTimeout = null
 let destTimeout = null
@@ -74,12 +76,16 @@ function selectOrigin(stop) {
   originSelected.value = stop
   originQuery.value = stop.name
   originResults.value = []
+  originFocused.value = false
+  settingsStore.addToStationHistory(stop)
 }
 
 function selectDest(stop) {
   destSelected.value = stop
   destQuery.value = stop.name
   destResults.value = []
+  destFocused.value = false
+  settingsStore.addToStationHistory(stop)
 }
 
 function swapStops() {
@@ -482,6 +488,8 @@ const filteredTrips = computed(() => {
             autocomplete="off"
             autocorrect="off"
             spellcheck="false"
+            @focus="originFocused = true"
+            @blur="originFocused = false"
           />
           <!-- Spinner -->
           <div v-if="originSearching" class="absolute right-3 top-1/2 -translate-y-1/2">
@@ -490,16 +498,35 @@ const filteredTrips = computed(() => {
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
             </svg>
           </div>
-          <!-- Dropdown -->
+          <!-- Suchergebnis-Dropdown -->
           <div v-if="originResults.length" class="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-ios-dark-card rounded-xl shadow-lg border border-ios-separator dark:border-ios-dark-separator z-50 overflow-hidden">
             <button
               v-for="stop in originResults.slice(0, 5)"
               :key="stop.id"
-              @click="selectOrigin(stop)"
+              @mousedown.prevent="selectOrigin(stop)"
               class="w-full text-left px-4 py-3 text-[15px] text-ios-label dark:text-white border-b border-ios-separator dark:border-ios-dark-separator last:border-0 active:bg-ios-bg dark:active:bg-ios-dark-bg"
             >
               <span class="font-medium">{{ stop.name }}</span>
               <span v-if="stop.place" class="text-ios-secondary text-[13px] ml-1">{{ stop.place }}</span>
+            </button>
+          </div>
+          <!-- History-Dropdown -->
+          <div v-else-if="originFocused && !originSearching && settingsStore.stationHistory.length" class="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-ios-dark-card rounded-xl shadow-lg border border-ios-separator dark:border-ios-dark-separator z-50 overflow-hidden">
+            <div class="px-4 py-2 text-[11px] font-semibold text-ios-secondary uppercase tracking-wide border-b border-ios-separator dark:border-ios-dark-separator">Zuletzt verwendet</div>
+            <button
+              v-for="stop in settingsStore.stationHistory.slice(0, 5)"
+              :key="stop.id"
+              @mousedown.prevent="selectOrigin(stop)"
+              class="w-full text-left px-4 py-3 text-[15px] text-ios-label dark:text-white border-b border-ios-separator dark:border-ios-dark-separator last:border-0 active:bg-ios-bg dark:active:bg-ios-dark-bg flex items-center gap-2"
+            >
+              <svg class="w-4 h-4 text-ios-secondary flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M12 7v5l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              <span>
+                <span class="font-medium">{{ stop.name }}</span>
+                <span v-if="stop.place" class="text-ios-secondary text-[13px] ml-1">{{ stop.place }}</span>
+              </span>
             </button>
           </div>
         </div>
@@ -545,6 +572,8 @@ const filteredTrips = computed(() => {
               autocomplete="off"
               autocorrect="off"
               spellcheck="false"
+              @focus="destFocused = true"
+              @blur="destFocused = false"
             />
 
           </div>
@@ -554,15 +583,35 @@ const filteredTrips = computed(() => {
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
             </svg>
           </div>
+          <!-- Suchergebnis-Dropdown -->
           <div v-if="destResults.length" class="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-ios-dark-card rounded-xl shadow-lg border border-ios-separator dark:border-ios-dark-separator z-50 overflow-hidden">
             <button
               v-for="stop in destResults.slice(0, 5)"
               :key="stop.id"
-              @click="selectDest(stop)"
+              @mousedown.prevent="selectDest(stop)"
               class="w-full text-left px-4 py-3 text-[15px] text-ios-label dark:text-white border-b border-ios-separator dark:border-ios-dark-separator last:border-0 active:bg-ios-bg dark:active:bg-ios-dark-bg"
             >
               <span class="font-medium">{{ stop.name }}</span>
               <span v-if="stop.place" class="text-ios-secondary text-[13px] ml-1">{{ stop.place }}</span>
+            </button>
+          </div>
+          <!-- History-Dropdown -->
+          <div v-else-if="destFocused && !destSearching && settingsStore.stationHistory.length" class="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-ios-dark-card rounded-xl shadow-lg border border-ios-separator dark:border-ios-dark-separator z-50 overflow-hidden">
+            <div class="px-4 py-2 text-[11px] font-semibold text-ios-secondary uppercase tracking-wide border-b border-ios-separator dark:border-ios-dark-separator">Zuletzt verwendet</div>
+            <button
+              v-for="stop in settingsStore.stationHistory.slice(0, 5)"
+              :key="stop.id"
+              @mousedown.prevent="selectDest(stop)"
+              class="w-full text-left px-4 py-3 text-[15px] text-ios-label dark:text-white border-b border-ios-separator dark:border-ios-dark-separator last:border-0 active:bg-ios-bg dark:active:bg-ios-dark-bg flex items-center gap-2"
+            >
+              <svg class="w-4 h-4 text-ios-secondary flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M12 7v5l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              <span>
+                <span class="font-medium">{{ stop.name }}</span>
+                <span v-if="stop.place" class="text-ios-secondary text-[13px] ml-1">{{ stop.place }}</span>
+              </span>
             </button>
           </div>
         </div>

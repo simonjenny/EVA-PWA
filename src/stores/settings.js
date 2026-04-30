@@ -5,6 +5,7 @@ const STORAGE_KEY = 'abfahrten-v1'
 const DARK_MODE_KEY = 'abfahrten-darkmode-v1'
 const REFRESH_KEY = 'abfahrten-refresh-v1'
 const HOME_STOP_KEY = 'abfahrten-homestop-v1'
+const STATION_HISTORY_KEY = 'trip-station-history-v1'
 
 function generateId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -32,9 +33,18 @@ export const useSettingsStore = defineStore('settings', () => {
     try { return JSON.parse(localStorage.getItem(HOME_STOP_KEY)) } catch { return null }
   })())
 
+  // Stationshistory für den Reiseplaner: [{ id, name, place, lat, lon }, ...]
+  const stationHistory = ref((() => {
+    try { return JSON.parse(localStorage.getItem(STATION_HISTORY_KEY)) || [] } catch { return [] }
+  })())
+
   watch(homeStop, (val) => {
     if (val) localStorage.setItem(HOME_STOP_KEY, JSON.stringify(val))
     else localStorage.removeItem(HOME_STOP_KEY)
+  }, { deep: true })
+
+  watch(stationHistory, (val) => {
+    localStorage.setItem(STATION_HISTORY_KEY, JSON.stringify(val))
   }, { deep: true })
 
   watch(stops, (val) => {
@@ -89,6 +99,14 @@ export const useSettingsStore = defineStore('settings', () => {
     homeStop.value = stop  // { id, stopId, stopName, lat, lon } oder null
   }
 
+  function addToStationHistory(stop) {
+    // Duplikate entfernen, neue Station vorne einfügen, max. 3 Einträge
+    stationHistory.value = [
+      stop,
+      ...stationHistory.value.filter(s => s.id !== stop.id)
+    ].slice(0, 3)
+  }
+
   function clearAll() {
     stops.value = []
   }
@@ -98,5 +116,5 @@ export const useSettingsStore = defineStore('settings', () => {
     if (stop) { stop.lat = lat; stop.lon = lon }
   }
 
-  return { stops, darkMode, refreshInterval, homeStop, addStop, removeStop, addFilter, removeFilter, toggleDarkMode, setStopCoords, setHomeStop, clearAll }
+  return { stops, darkMode, refreshInterval, homeStop, stationHistory, addStop, removeStop, addFilter, removeFilter, toggleDarkMode, setStopCoords, setHomeStop, addToStationHistory, clearAll }
 })
