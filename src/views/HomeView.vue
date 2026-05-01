@@ -1,3 +1,7 @@
+<script>
+export default { name: 'HomeView' }
+</script>
+
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useSettingsStore } from '../stores/settings.js'
