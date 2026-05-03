@@ -8,8 +8,7 @@
     "dev:ios": "./dev",
     "build": "vite build",
     "preview": "vite preview",
-    "generate-icons": "pwa-assets-generator --config pwa-assets.config.js",
-    "deploy": "dotenv -e .env -- sh -c 'vite build && rsync -rvaz dist/ \"$RSYNC_DEST\"'"
+    "generate-icons": "pwa-assets-generator --config pwa-assets.config.js"
   },
   "dependencies": {
     "jsqr": "^1.4.0",
