@@ -10,8 +10,8 @@ export default defineConfig({
       injectRegister: null,
       includeAssets: ['icon.svg', 'favicon.ico', 'apple-touch-icon-180x180.png'],
       manifest: {
-        name: 'Abfahrten',
-        short_name: 'Abfahrten',
+        name: 'ÖV',
+        short_name: 'ÖV',
         description: 'Öffentlicher Nahverkehr – Abfahrtszeiten',
         theme_color: '#007AFF',
         background_color: '#F2F2F7',

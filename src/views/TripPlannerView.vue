@@ -26,24 +26,6 @@ const destFocused = ref(false)
 let originTimeout = null
 let destTimeout = null
 
-function debounceSearch(query, results, searching, timeout) {
-  return (val) => {
-    clearTimeout(timeout)
-    results.value = []
-    if (val.trim().length < 2) { searching.value = false; return }
-    searching.value = true
-    return new Promise(resolve => {
-      timeout = setTimeout(async () => {
-        try {
-          results.value = await searchStops(val)
-        } catch { results.value = [] }
-        finally { searching.value = false }
-        resolve()
-      }, 350)
-    })
-  }
-}
-
 watch(originQuery, async (val) => {
   if (originSelected.value && originSelected.value.name === val) return
   originSelected.value = null

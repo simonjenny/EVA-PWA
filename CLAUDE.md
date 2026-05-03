@@ -4,7 +4,7 @@ This file provides context and instructions for AI agents (Claude, OpenCode, Cop
 
 ## Project Overview
 
-**EfaPWA / Abfahrten** is a Progressive Web App (PWA) for real-time public transit departure monitoring in the Basel/Baden-Württemberg region (Germany/Switzerland). Users configure transit stops, see live departure countdowns, and filter by line/direction. A trip planner (Reiseplaner) is also included.
+**ÖV** is a Progressive Web App (PWA) for real-time public transit departure monitoring in the Basel/Baden-Württemberg region (Germany/Switzerland). Users configure transit stops, see live departure countdowns, and filter by line/direction. A trip planner (Reiseplaner) is also included.
 
 Live instance: https://ov.b65.ch
 
@@ -17,13 +17,7 @@ npm run dev          # Start Vite dev server (all interfaces, HMR enabled)
 npm run dev:ios      # Start dev server with iOS-specific config (via ./dev script)
 npm run build        # Production build → dist/
 npm run preview      # Preview production build locally
-npm run deploy       # Build + rsync to remote server (requires .env with RSYNC_DEST)
 npm run generate-icons  # Regenerate PWA icons from icon.svg
-```
-
-**Deploy config** is in `.env` (not committed):
-```
-RSYNC_DEST=user@host:/path/to/webroot/
 ```
 
 ---
@@ -199,5 +193,4 @@ Custom animation: `spin-reverse` (reverse spin for loading indicators).
 2. **Coordinate order** — EFA returns `"lon,lat"`, not `"lat,lon"`. Destructure carefully: `const [lonStr, latStr] = coord.split(',')`.
 3. **stopId vs internal id** — `stop.stopId` is the EFA API ID; `stop.id` is the internal Pinia UUID. `addFilter()` takes the internal `id`, not the EFA `stopId`.
 4. **PWA icons** — regenerate with `npm run generate-icons` after changing `icon.svg`. Source: `pwa-assets.config.js`.
-5. **Deploy** — requires `.env` with `RSYNC_DEST`. Run `npm run deploy` (not just `build` + manual rsync).
-6. **README is partially outdated** — the README documents 2 views and 2 routes, but there are now 4 routes including the trip planner.
+5. **README is partially outdated** — the README documents 2 views and 2 routes, but there are now 4 routes including the trip planner.
