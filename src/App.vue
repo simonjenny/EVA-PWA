@@ -1,6 +1,7 @@
 <script setup>
 import { watch, onMounted, ref } from 'vue'
 import BottomNav from './components/BottomNav.vue'
+import UpdatePrompt from './components/UpdatePrompt.vue'
 import { useSettingsStore } from './stores/settings.js'
 import { useRouter, useRoute } from 'vue-router'
 
@@ -70,6 +71,7 @@ watch(() => store.darkMode, applyDarkMode)
 
 <template>
   <div id="app-shell">
+    <UpdatePrompt />
     <main ref="mainEl" class="bg-ios-gray dark:bg-ios-dark-bg" style="padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 52px);">
       <router-view v-slot="{ Component }">
         <keep-alive include="HomeView">

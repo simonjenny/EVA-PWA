@@ -1,0 +1,80 @@
+# EfaPWA / Abfahrten
+
+> Progressive Web App for real-time public transit departure monitoring in the Basel/Baden-Württemberg region (Germany/Switzerland).
+
+Live instance: https://ov.b65.ch
+
+## Tech Stack
+
+- Vue 3.4 (Composition API, `<script setup>`), JavaScript ES Modules (no TypeScript)
+- Vite 5.2, Pinia 2.1 (localStorage persistence), Vue Router 4.3
+- Tailwind CSS 3.4 with iOS design system (`ios-blue`, `ios-gray`, `ios-dark`, `ios-secondary`, `ios-separator`)
+- vite-plugin-pwa 0.20 + Workbox (NetworkFirst for EFA API, 60s TTL)
+- External API: EFA Baden-Württemberg (`https://www.efa-bw.de/bvb3`), no auth required
+- QR code support: `jsqr` (scan), `qrcode` (generate)
+
+## Key Files
+
+- `src/main.js` — App entry point, mounts Vue + Pinia + Router
+- `src/App.vue` — Root component, applies dark mode class to `<html>`, renders `<router-view>` + `<BottomNav>`
+- `src/router/index.js` — 4 routes: `/`, `/trip`, `/trip/detail`, `/settings`
+- `src/views/HomeView.vue` — Departure board with auto-refresh and StopCard list
+- `src/views/TripPlannerView.vue` — Journey planner with origin/destination search
+- `src/views/TripDetailView.vue` — Trip itinerary detail view
+- `src/views/SettingsView.vue` — Settings: dark mode, refresh interval, stop management
+- `src/components/StopCard.vue` — Single stop card with skeleton loader, departures, countdown badges
+- `src/components/BottomNav.vue` — Fixed bottom tab bar (3 tabs)
+- `src/components/UpdatePrompt.vue` — PWA SW update prompt
+- `src/services/efa.js` — All EFA API calls (pure functions): `searchStops`, `getDepartures`, `getAvailableLines`, `findNearestStop`, `resolveStopCoords`, `planTrip`, `getCountdownMinutes`, `filterDepartures`
+- `src/stores/settings.js` — Pinia store: `stops[]`, `darkMode`, `refreshInterval`, `homeStop`, `stationHistory`
+- `src/utils/lineColors.js` — Transit line badge colors by line name prefix and motType
+- `vite.config.js` — Vite + VitePWA configuration
+- `tailwind.config.js` — Tailwind config with iOS color tokens
+
+## EFA API
+
+Base URL: `https://www.efa-bw.de/bvb3`
+
+| Endpoint | Function | Purpose |
+|---|---|---|
+| `XSLT_STOPFINDER_REQUEST` | `searchStops(query)` | Stop search by name |
+| `XML_DM_REQUEST` | `getDepartures(stopId)` | Live departures (40 items, realtime) |
+| `XML_DM_REQUEST` | `getAvailableLines(stopId)` | All lines/directions for a stop |
+| `XML_DM_REQUEST` | `resolveStopCoords(stopId)` | Resolve coordinates for a known stopId |
+| `XML_COORD_REQUEST` | `findNearestStop(lat, lon)` | Nearest stop to GPS coordinates |
+| `XSLT_TRIP_REQUEST2` | `planTrip(originId, destId, dateTime, depArr)` | Plan a journey |
+
+**Critical:** EFA returns a single object (not array) when only 1 result is found. Use `ensureArray()` from `efa.js`.
+**Coordinate order:** EFA returns `"lon,lat"` strings — lon comes first.
+
+## Data Structures
+
+Stop object stored in Pinia:
+```js
+{ id: string, stopId: string, stopName: string, lat: number|null, lon: number|null, filters: Filter[] }
+```
+
+Filter object:
+```js
+{ id: string, line: string, direction: string }  // empty string = match all
+```
+
+## Code Conventions
+
+- `<script setup>` in all Vue components
+- No TypeScript, no test framework
+- Tailwind utilities only (no custom CSS classes unless unavoidable)
+- Dark mode via Tailwind `class` strategy
+- All user-facing strings in German
+- `async/await` over `.then()` chains
+- `try/catch` in all service calls; local `ref()` for loading/error state in components
+
+## Commands
+
+```bash
+npm run dev          # Vite dev server (all interfaces, HMR)
+npm run build        # Production build → dist/
+npm run preview      # Preview production build
+npm run deploy       # Build + rsync (requires .env with RSYNC_DEST)
+npm run generate-icons  # Regenerate PWA icons from icon.svg
+```

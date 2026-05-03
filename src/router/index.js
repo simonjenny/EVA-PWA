@@ -5,7 +5,7 @@ import TripPlannerView from '../views/TripPlannerView.vue'
 import TripDetailView from '../views/TripDetailView.vue'
 
 export default createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   scrollBehavior: () => ({ top: 0, behavior: 'instant' }),
   routes: [
     { path: '/', component: HomeView, meta: { title: 'Abfahrten' } },
