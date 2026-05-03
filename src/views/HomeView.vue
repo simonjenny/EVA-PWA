@@ -61,6 +61,15 @@ const sortedStops = computed(() => {
   })
 })
 
+// Initialisiert stopData für alle Stops (Skeletons sofort sichtbar)
+function initStopData() {
+  for (const stop of store.stops) {
+    if (!stopData.value[stop.id]) {
+      stopData.value[stop.id] = { departures: [], fetchedAt: null, loading: true, error: null }
+    }
+  }
+}
+
 async function fetchStop(stop) {
   if (!stopData.value[stop.id]) {
     stopData.value[stop.id] = { departures: [], fetchedAt: null, loading: true, error: null }
@@ -79,16 +88,23 @@ async function fetchStop(stop) {
   }
 }
 
-const isLoading = ref(false)
+// Zählt wie viele Stops noch laden
+const loadingCount = ref(0)
+const isLoading = computed(() => loadingCount.value > 0)
 
 async function refreshAll() {
-  isLoading.value = true
-  await ensureStopCoords()
-  await Promise.all(store.stops.map(fetchStop))
-  isLoading.value = false
+  loadingCount.value = store.stops.length
+  // Koordinaten im Hintergrund auflösen (nicht blockierend)
+  ensureStopCoords()
+  // Jeder Stop lädt unabhängig und zeigt Daten sofort wenn fertig
+  store.stops.forEach(async (stop) => {
+    await fetchStop(stop)
+    loadingCount.value--
+  })
 }
 
 onMounted(() => {
+  initStopData()  // Skeletons sofort sichtbar
   startGeoWatch()
   refreshAll()
   refreshTimer = setInterval(refreshAll, store.refreshInterval * 1000)
