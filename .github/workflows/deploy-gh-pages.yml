@@ -34,7 +34,7 @@ jobs:
       - name: Build
         run: |
           set -o pipefail
-          npm run build -- --base=/${{ github.event.repository.name }}/ 2>&1 | tee build.log
+          npm run build 2>&1 | tee build.log
 
       - name: Build summary
         if: always()
