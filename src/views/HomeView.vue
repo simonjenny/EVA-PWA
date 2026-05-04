@@ -273,16 +273,16 @@ onUnmounted(() => {
       :on-toggle="toggleNearbyStop"
     />
 
-    <!-- Leer-Zustand -->
-    <div v-if="store.stops.length === 0 && !nearbyStop" class="flex flex-col items-center mt-20 gap-4 text-center">
-      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" class="text-ios-secondary opacity-50">
+    <!-- Hinweis wenn keine Haltestellen konfiguriert -->
+    <div v-if="store.stops.length === 0" class="flex flex-col items-center gap-4 text-center" :class="nearbyStop ? 'mt-6' : 'mt-20'">
+      <svg v-if="!nearbyStop" width="56" height="56" viewBox="0 0 24 24" fill="none" class="text-ios-secondary opacity-50">
         <rect x="3" y="3" width="18" height="14" rx="3" stroke="currentColor" stroke-width="1.5" />
         <path d="M3 9h18" stroke="currentColor" stroke-width="1.5" />
         <circle cx="7.5" cy="20" r="1.5" fill="currentColor" />
         <circle cx="16.5" cy="20" r="1.5" fill="currentColor" />
         <path d="M7.5 17v1.5M16.5 17v1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
       </svg>
-      <p class="text-ios-secondary text-base">Noch keine Haltestellen konfiguriert</p>
+      <p class="text-ios-gray text-base">Noch keine Haltestellen konfiguriert</p>
       <router-link
         to="/settings"
         class="text-ios-blue font-medium text-base"
