@@ -206,6 +206,14 @@ function toggleLine(stop, line, direction) {
     store.addFilter(stop.id, line, direction)
   }
 }
+
+function decreaseMaxDepartures() {
+  if (store.maxDepartures > 1) store.maxDepartures--
+}
+
+function increaseMaxDepartures() {
+  if (store.maxDepartures < 10) store.maxDepartures++
+}
 </script>
 
 <template>
@@ -244,6 +252,7 @@ function toggleLine(stop, line, direction) {
       <div class="px-4 py-3 border-b border-gray-100 dark:border-ios-dark-separator">
         <p class="text-xs font-medium text-ios-secondary uppercase tracking-wide">Heimhaltestelle</p>
       </div>
+
 
       <!-- Gesetzt: Anzeige + Löschen -->
       <div v-if="store.homeStop" class="flex items-center px-4 py-4 gap-3">
@@ -302,6 +311,11 @@ function toggleLine(stop, line, direction) {
           </button>
         </div>
       </div>
+
+      <div class="px-4 pb-4">
+        <p class="text-xs text-ios-secondary">Wird als Startpunkt für die Reiseplanung verwendet. Wenn du eine Reise planst, wird diese Haltestelle automatisch als Abfahrtsort vorgeschlagen.</p>
+      </div>
+
     </div>
 
     <!-- ══ SEKTION: ABFAHRTEN ══ -->
@@ -312,6 +326,7 @@ function toggleLine(stop, line, direction) {
       <div class="px-4 py-3 border-b border-gray-100 dark:border-ios-dark-separator">
         <p class="text-xs font-medium text-ios-secondary uppercase tracking-wide">Automatisch aktualisieren</p>
       </div>
+
       <div class="flex items-center px-4 divide-x divide-gray-100 dark:divide-ios-dark-separator">
         <button
           v-for="option in [15, 30, 60, 120]"
@@ -323,6 +338,35 @@ function toggleLine(stop, line, direction) {
           {{ option >= 60 ? `${option / 60} min` : `${option} s` }}
         </button>
       </div>
+
+        <div class="px-4 pb-4">
+        <p class="text-xs text-ios-secondary">Lege fest, wie oft die Abfahrtszeiten im Hintergrund aktualisiert werden. Kürzere Intervalle zeigen aktuellere Daten, verbrauchen aber mehr Akku.</p>
+      </div>
+
+    </div>
+
+    <!-- Maximale Abfahrten -->
+    <div class="bg-white dark:bg-ios-dark-card rounded-2xl overflow-hidden mb-4" style="box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+      <div class="px-4 py-3 border-b border-gray-100 dark:border-ios-dark-separator">
+        <p class="text-xs font-medium text-ios-secondary uppercase tracking-wide">Maximale Abfahrten</p>
+      </div>
+
+      <div class="flex items-center px-4 divide-x divide-gray-100 dark:divide-ios-dark-separator">
+        <button
+          v-for="option in [1, 3, 5, 7, 9]"
+          :key="option"
+          @click="store.maxDepartures = option"
+          class="flex-1 py-3 text-sm font-medium transition-colors"
+          :class="store.maxDepartures === option ? 'text-ios-blue' : 'text-ios-secondary'"
+        >
+          {{ option }}
+        </button>
+      </div>
+
+            <div class="px-4 pb-4">
+        <p class="text-xs text-ios-secondary">Bestimmt, wie viele Abfahrten pro Haltestelle angezeigt werden. Diese Einstellung gilt für alle Haltestellen, einschließlich der angezeigten Haltestelle in deiner Nähe.</p>
+      </div>
+
     </div>
 
     <!-- Suchfeld für Abfahrts-Haltestellen -->

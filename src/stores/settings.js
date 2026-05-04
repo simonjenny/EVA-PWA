@@ -6,6 +6,7 @@ const DARK_MODE_KEY = 'abfahrten-darkmode-v1'
 const REFRESH_KEY = 'abfahrten-refresh-v1'
 const HOME_STOP_KEY = 'abfahrten-homestop-v1'
 const STATION_HISTORY_KEY = 'trip-station-history-v1'
+const MAX_DEPARTURES_KEY = 'abfahrten-max-departures-v1'
 
 function generateId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -27,6 +28,12 @@ export const useSettingsStore = defineStore('settings', () => {
   const stops = ref(load())
   const darkMode = ref(localStorage.getItem(DARK_MODE_KEY) === 'true')
   const refreshInterval = ref(Number(localStorage.getItem(REFRESH_KEY)) || 30)
+  const maxDepartures = ref((() => {
+    try {
+      const val = parseInt(localStorage.getItem(MAX_DEPARTURES_KEY), 10)
+      return (val >= 1 && val <= 10) ? val : 5
+    } catch { return 5 }
+  })())
 
   // Heimhaltestelle: { id, stopId, stopName, lat, lon }
   const homeStop = ref((() => {
@@ -57,6 +64,14 @@ export const useSettingsStore = defineStore('settings', () => {
 
   watch(refreshInterval, (val) => {
     localStorage.setItem(REFRESH_KEY, String(val))
+  })
+
+  watch(maxDepartures, (val) => {
+    localStorage.setItem(MAX_DEPARTURES_KEY, String(val))
+  })
+
+  watch(maxDepartures, (val) => {
+    localStorage.setItem(MAX_DEPARTURES_KEY, String(val))
   })
 
   function toggleDarkMode() {
@@ -116,5 +131,5 @@ export const useSettingsStore = defineStore('settings', () => {
     if (stop) { stop.lat = lat; stop.lon = lon }
   }
 
-  return { stops, darkMode, refreshInterval, homeStop, stationHistory, addStop, removeStop, addFilter, removeFilter, toggleDarkMode, setStopCoords, setHomeStop, addToStationHistory, clearAll }
+  return { stops, darkMode, refreshInterval, maxDepartures, homeStop, stationHistory, addStop, removeStop, addFilter, removeFilter, toggleDarkMode, setStopCoords, setHomeStop, addToStationHistory, clearAll }
 })

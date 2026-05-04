@@ -5,8 +5,9 @@ export default { name: 'HomeView' }
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useSettingsStore } from '../stores/settings.js'
-import { getDepartures, filterDepartures, resolveStopCoords } from '../services/efa.js'
+import { getDepartures, filterDepartures, resolveStopCoords, findNearestStop, getCountdownMinutes } from '../services/efa.js'
 import StopCard from '../components/StopCard.vue'
+import NearbyStopCard from '../components/NearbyStopCard.vue'
 
 const store = useSettingsStore()
 const stopData = ref({})
@@ -15,7 +16,14 @@ let geoWatcher = null
 
 const userLat = ref(null)
 const userLon = ref(null)
-const gpsStatus = ref('pending') // 'pending' | 'ok' | 'denied'
+const gpsStatus = ref('pending')
+
+const nearbyStop = ref(null)
+const nearbyStopExpanded = ref(false)
+const nearbyStopDepartures = ref([])
+const nearbyStopLoading = ref(false)
+const nearbyStopFetchedAt = ref(null)
+const nearbyStopError = ref(null)
 
 function startGeoWatch() {
   if (!navigator.geolocation) { gpsStatus.value = 'denied'; return }
@@ -25,10 +33,39 @@ function startGeoWatch() {
       userLat.value = pos.coords.latitude
       userLon.value = pos.coords.longitude
       gpsStatus.value = 'ok'
+      updateNearbyStop()
     },
-    () => { gpsStatus.value = 'denied' },
+    () => { 
+      gpsStatus.value = 'denied'
+      nearbyStop.value = null
+    },
     { enableHighAccuracy: false, maximumAge: 60000 }
   )
+}
+
+async function updateNearbyStop() {
+  if (userLat.value === null || userLon.value === null) {
+    nearbyStop.value = null
+    return
+  }
+  try {
+    const nearest = await findNearestStop(userLat.value, userLon.value)
+    if (!nearest) {
+      nearbyStop.value = null
+      return
+    }
+    const isConfigured = store.stops.some(s => s.stopId === nearest.id)
+    if (isConfigured) {
+      nearbyStop.value = null
+    } else {
+      nearbyStop.value = nearest
+      if (nearbyStopExpanded.value) {
+        fetchNearbyStopDepartures()
+      }
+    }
+  } catch {
+    nearbyStop.value = null
+  }
 }
 
 function haversineKm(lat1, lon1, lat2, lon2) {
@@ -61,25 +98,72 @@ const sortedStops = computed(() => {
   })
 })
 
-// Initialisiert stopData für alle Stops (Skeletons sofort sichtbar)
 function initStopData() {
   for (const stop of store.stops) {
     if (!stopData.value[stop.id]) {
-      stopData.value[stop.id] = { departures: [], fetchedAt: null, loading: true, error: null }
+      stopData.value[stop.id] = {
+        departures: [],
+        fetchedAt: null,
+        loading: true,
+        error: null,
+        expanded: false,
+        allDepartures: [],
+        allDeparturesLoading: false,
+        allDeparturesFetchedAt: null
+      }
     }
+  }
+}
+
+async function fetchNearbyStopDepartures() {
+  if (!nearbyStop.value) return
+  nearbyStopLoading.value = true
+  nearbyStopError.value = null
+  try {
+    const all = await getDepartures(nearbyStop.value.id)
+    const sorted = all.sort((a, b) => {
+      const aMin = getCountdownMinutes(a, nearbyStopFetchedAt.value)
+      const bMin = getCountdownMinutes(b, nearbyStopFetchedAt.value)
+      if (aMin === null && bMin === null) return 0
+      if (aMin === null) return 1
+      if (bMin === null) return -1
+      return aMin - bMin
+    })
+    nearbyStopDepartures.value = sorted.slice(0, store.maxDepartures)
+    nearbyStopFetchedAt.value = Date.now()
+  } catch {
+    nearbyStopError.value = 'Verbindungsfehler – bitte prüfe deine Verbindung'
+  } finally {
+    nearbyStopLoading.value = false
+  }
+}
+
+function toggleNearbyStop() {
+  nearbyStopExpanded.value = !nearbyStopExpanded.value
+  if (nearbyStopExpanded.value && nearbyStop.value) {
+    fetchNearbyStopDepartures()
   }
 }
 
 async function fetchStop(stop) {
   if (!stopData.value[stop.id]) {
-    stopData.value[stop.id] = { departures: [], fetchedAt: null, loading: true, error: null }
+    stopData.value[stop.id] = {
+      departures: [],
+      fetchedAt: null,
+      loading: true,
+      error: null,
+      expanded: false,
+      allDepartures: [],
+      allDeparturesLoading: false,
+      allDeparturesFetchedAt: null
+    }
   }
   stopData.value[stop.id].loading = true
   stopData.value[stop.id].error = null
   try {
     const all = await getDepartures(stop.stopId)
     const filtered = filterDepartures(all, stop.filters)
-    stopData.value[stop.id].departures = filtered.slice(0, 6)
+    stopData.value[stop.id].departures = filtered.slice(0, store.maxDepartures)
     stopData.value[stop.id].fetchedAt = Date.now()
   } catch {
     stopData.value[stop.id].error = 'Verbindungsfehler – bitte prüfe deine Verbindung'
@@ -88,23 +172,57 @@ async function fetchStop(stop) {
   }
 }
 
-// Zählt wie viele Stops noch laden
+async function fetchStopAllDepartures(stop) {
+  if (!stopData.value[stop.id]) return
+  stopData.value[stop.id].allDeparturesLoading = true
+  try {
+    const all = await getDepartures(stop.stopId)
+    const sorted = all.sort((a, b) => {
+      const aMin = getCountdownMinutes(a, stopData.value[stop.id].allDeparturesFetchedAt)
+      const bMin = getCountdownMinutes(b, stopData.value[stop.id].allDeparturesFetchedAt)
+      if (aMin === null && bMin === null) return 0
+      if (aMin === null) return 1
+      if (bMin === null) return -1
+      return aMin - bMin
+    })
+    stopData.value[stop.id].allDepartures = sorted.slice(0, store.maxDepartures)
+    stopData.value[stop.id].allDeparturesFetchedAt = Date.now()
+  } catch {
+    // Fehler stillschweigend ignorieren
+  } finally {
+    stopData.value[stop.id].allDeparturesLoading = false
+  }
+}
+
+function toggleStopExpand(stopId) {
+  if (!stopData.value[stopId]) return
+  stopData.value[stopId].expanded = !stopData.value[stopId].expanded
+  if (stopData.value[stopId].expanded) {
+    const stop = store.stops.find(s => s.id === stopId)
+    if (stop) fetchStopAllDepartures(stop)
+  }
+}
+
 const loadingCount = ref(0)
 const isLoading = computed(() => loadingCount.value > 0)
 
 async function refreshAll() {
   loadingCount.value = store.stops.length
-  // Koordinaten im Hintergrund auflösen (nicht blockierend)
   ensureStopCoords()
-  // Jeder Stop lädt unabhängig und zeigt Daten sofort wenn fertig
+  if (nearbyStop.value && nearbyStopExpanded.value) {
+    fetchNearbyStopDepartures()
+  }
   store.stops.forEach(async (stop) => {
     await fetchStop(stop)
+    if (stopData.value[stop.id]?.expanded) {
+      await fetchStopAllDepartures(stop)
+    }
     loadingCount.value--
   })
 }
 
 onMounted(() => {
-  initStopData()  // Skeletons sofort sichtbar
+  initStopData()
   startGeoWatch()
   refreshAll()
   refreshTimer = setInterval(refreshAll, store.refreshInterval * 1000)
@@ -114,6 +232,10 @@ watch(() => store.refreshInterval, val => {
   clearInterval(refreshTimer)
   refreshTimer = setInterval(refreshAll, val * 1000)
 })
+
+watch(() => store.stops, () => {
+  updateNearbyStop()
+}, { deep: true })
 
 onUnmounted(() => {
   clearInterval(refreshTimer)
@@ -133,12 +255,26 @@ onUnmounted(() => {
       >
         <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="transform-box: fill-box; transform-origin: center;" :class="{ 'spin-reverse': isLoading }">
           <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8z" />
-          <path d="M12 20v3l4-4-4-4v3c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8z" />
+          <path d="M12 20v3l4-4-4-4v3c-3.31 0-6-2.69-6-6 0-1.01-.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8z" />
         </svg>
       </button>
     </div>
+
+    <!-- Nearby Stop Card -->
+    <NearbyStopCard
+      v-if="nearbyStop"
+      :stop="nearbyStop"
+      :distance-km="(userLat !== null && userLon !== null && nearbyStop.lat !== null && nearbyStop.lon !== null) ? haversineKm(userLat, userLon, nearbyStop.lat, nearbyStop.lon) : null"
+      :expanded="nearbyStopExpanded"
+      :departures="nearbyStopDepartures"
+      :loading="nearbyStopLoading"
+      :error="nearbyStopError"
+      :fetched-at="nearbyStopFetchedAt"
+      :on-toggle="toggleNearbyStop"
+    />
+
     <!-- Leer-Zustand -->
-    <div v-if="store.stops.length === 0" class="flex flex-col items-center mt-20 gap-4 text-center">
+    <div v-if="store.stops.length === 0 && !nearbyStop" class="flex flex-col items-center mt-20 gap-4 text-center">
       <svg width="56" height="56" viewBox="0 0 24 24" fill="none" class="text-ios-secondary opacity-50">
         <rect x="3" y="3" width="18" height="14" rx="3" stroke="currentColor" stroke-width="1.5" />
         <path d="M3 9h18" stroke="currentColor" stroke-width="1.5" />
@@ -156,7 +292,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Haltestellen-Karten -->
-    <div v-else class="flex flex-col gap-4">
+    <div v-if="store.stops.length > 0" class="flex flex-col gap-4">
       <StopCard
         v-for="stop in sortedStops"
         :key="stop.id"
@@ -166,6 +302,11 @@ onUnmounted(() => {
         :loading="stopData[stop.id]?.loading ?? true"
         :error="stopData[stop.id]?.error ?? null"
         :distance-km="(userLat !== null && userLon !== null && stop.lat != null && stop.lon != null) ? haversineKm(userLat, userLon, stop.lat, stop.lon) : null"
+        :expanded="stopData[stop.id]?.expanded ?? false"
+        :all-departures="stopData[stop.id]?.allDepartures ?? []"
+        :all-departures-loading="stopData[stop.id]?.allDeparturesLoading ?? false"
+        :all-departures-fetched-at="stopData[stop.id]?.allDeparturesFetchedAt ?? null"
+        :on-toggle="() => toggleStopExpand(stop.id)"
       />
     </div>
   </div>
