@@ -46,13 +46,35 @@ src/
 ├── App.vue                  # Root: dark mode class toggle, <router-view>, <BottomNav>
 ├── router/index.js          # 4 routes (see Routes section)
 ├── views/
-│   ├── HomeView.vue         # Departure board — auto-refresh, StopCard list
+│   ├── HomeView.vue         # Departure board — auto-refresh, StopCard list, nearby stop detection
 │   ├── TripPlannerView.vue  # Journey planner — origin/destination search
 │   ├── TripDetailView.vue   # Trip itinerary detail view
 │   └── SettingsView.vue     # Settings — dark mode, refresh interval, stop management
 ├── components/
 │   ├── BottomNav.vue        # Fixed bottom tab bar (3 tabs)
 │   ├── StopCard.vue         # Single stop: skeleton loader, departures, countdown badges
+│   ├── NearbyStopCard.vue   # Auto-detected nearby stop with expandable departures
+│   └── UpdatePrompt.vue     # PWA service worker update prompt (registerType: 'prompt')
+├── services/
+│   └── efa.js               # All EFA API calls (pure functions, no state)
+├── stores/
+│   └── settings.js          # Pinia store: stops, darkMode, refreshInterval, homeStop, stationHistory
+└── utils/
+    └── lineColors.js        # Transit line badge colors by name/motType
+```
+src/
+├── main.js                  # App entry: Vue + Pinia + Router mount
+├── App.vue                  # Root: dark mode class toggle, <router-view>, <BottomNav>
+├── router/index.js          # 4 routes (see Routes section)
+├── views/
+│   ├── HomeView.vue         # Departure board — auto-refresh, StopCard list, nearby stop detection
+│   ├── TripPlannerView.vue  # Journey planner — origin/destination search
+│   ├── TripDetailView.vue   # Trip itinerary detail view
+│   └── SettingsView.vue     # Settings — dark mode, refresh interval, stop management
+├── components/
+│   ├── BottomNav.vue        # Fixed bottom tab bar (3 tabs)
+│   ├── StopCard.vue         # Single stop: skeleton loader, departures, countdown badges
+│   ├── NearbyStopCard.vue   # Auto-detected nearby stop with expandable departures
 │   └── UpdatePrompt.vue     # PWA service worker update prompt (registerType: 'prompt')
 ├── services/
 │   └── efa.js               # All EFA API calls (pure functions, no state)
@@ -193,4 +215,5 @@ Custom animation: `spin-reverse` (reverse spin for loading indicators).
 2. **Coordinate order** — EFA returns `"lon,lat"`, not `"lat,lon"`. Destructure carefully: `const [lonStr, latStr] = coord.split(',')`.
 3. **stopId vs internal id** — `stop.stopId` is the EFA API ID; `stop.id` is the internal Pinia UUID. `addFilter()` takes the internal `id`, not the EFA `stopId`.
 4. **PWA icons** — regenerate with `npm run generate-icons` after changing `icon.svg`. Source: `pwa-assets.config.js`.
-5. **README is partially outdated** — the README documents 2 views and 2 routes, but there are now 4 routes including the trip planner.
+5. **NearbyStopCard** — only shown when GPS is available and the nearest stop is NOT already in `store.stops`. The nearby stop uses `stop.name` (EFA API name), not `stop.stopName`.
+6. **`text-ios-gray` is a background color** (`#F2F2F7`) — use `text-ios-secondary` (`#8E8E93`) for secondary text instead.

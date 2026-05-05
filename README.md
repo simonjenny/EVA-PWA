@@ -76,6 +76,7 @@ Live-Instanz: https://ov.b65.ch
 │   ├── components/
 │   │   ├── BottomNav.vue        # Fixe Tab-Leiste (3 Tabs)
 │   │   ├── StopCard.vue         # Haltestellen-Karte mit gruppierten Abfahrten
+│   │   ├── NearbyStopCard.vue   # Automatisch erkannte Haltestelle in der Nähe
 │   │   └── UpdatePrompt.vue     # PWA Service-Worker-Update-Banner
 │   ├── services/
 │   │   └── efa.js               # EFA API-Client (alle Abfragen, pure functions)
@@ -119,6 +120,7 @@ Root-Shell. Beobachtet `store.darkMode` und setzt/entfernt `.dark` auf `<html>`.
 Hauptansicht – zeigt alle konfigurierten Haltestellen als `StopCard`-Liste.
 
 - Startet einen GPS-Watcher (`navigator.geolocation.watchPosition`) und sortiert Haltestellen nach Haversine-Distanz
+- Erkennt automatisch die nächstgelegene nicht-konfigurierte Haltestelle und zeigt sie als `NearbyStopCard` an
 - Löst fehlende Koordinaten via `resolveStopCoords()` auf
 - Lädt Abfahrten beim Mount und per `setInterval` (Intervall aus Store)
 - Zeigt Leer-Zustand mit Link zu Einstellungen wenn keine Haltestellen konfiguriert sind
@@ -175,6 +177,16 @@ Fixe Tab-Leiste am unteren Bildschirmrand mit `safe-area-inset-bottom`.
 | Abfahrten | `/` |
 | Reiseplaner | `/trip` |
 | Einstellungen | `/settings` |
+
+---
+
+### `NearbyStopCard.vue`
+Automatisch eingeblendete Karte für die nächstgelegene nicht-konfigurierte Haltestelle.
+
+- Wird nur angezeigt wenn GPS verfügbar und die Haltestelle nicht bereits in `store.stops` enthalten
+- Blauer hervorgehobener Header mit „In deiner Nähe"-Label und Standort-Icon
+- Aufklappbar – lädt Abfahrten erst beim Expandieren
+- Zeigt Entfernung, Linienbadges, Richtung und Countdown-Pillen
 
 ---
 

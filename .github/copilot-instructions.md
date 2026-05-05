@@ -52,6 +52,7 @@ src/
 │   └── SettingsView.vue     # Settings
 └── components/
     ├── StopCard.vue         # Single stop with departures
+    ├── NearbyStopCard.vue   # Auto-detected nearby stop
     ├── BottomNav.vue        # Bottom tab bar
     └── UpdatePrompt.vue     # PWA update prompt
 ```
