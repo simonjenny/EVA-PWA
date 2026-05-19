@@ -265,6 +265,25 @@ export async function getAvailableLines(stopId) {
 }
 
 /**
+ * Gibt aktuelle Störungen, Baustellen und Umleitungen im BVB-Netz zurück.
+ */
+export async function getDisruptions() {
+  const res = await fetch('https://ems.ivi.bvb.ch/addinfo/nvbw/bvb_homepage_device')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return ensureArray(data.infos?.current).map(item => ({
+    id: item.id,
+    title: item.urlText || '',
+    description: item.properties?.additionalContent || item.content || '',
+    cause: item.properties?.genericParams?.AlertCause || '',
+    validFrom: item.timestamps?.validity?.[0]?.from || null,
+    validTo: item.timestamps?.validity?.[0]?.to || null,
+    affectedLines: ensureArray(item.affected?.lines).map(l => ({ number: l.number, name: l.name })),
+    affectedStops: ensureArray(item.affected?.stops).map(s => ({ name: s.name }))
+  }))
+}
+
+/**
  * Filtert Abfahrten nach konfigurierten Linien/Richtungen.
  * Leeres filters-Array = keine Filterung.
  */

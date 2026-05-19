@@ -30,6 +30,21 @@ const route = useRoute()
       </router-link>
 
       <router-link
+        to="/assistant"
+        class="flex flex-col items-center justify-center flex-1 h-[46px] gap-0.5 transition-colors"
+        :class="route.path === '/assistant' ? 'text-ios-blue' : 'text-ios-secondary'"
+      >
+        <!-- ÖV-Assistent Chat -->
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20 3H4C2.9 3 2 3.9 2 5v11c0 1.1.9 2 2 2h4l3 3 3-3h6c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          <circle cx="8" cy="11" r="1.1" fill="currentColor"/>
+          <circle cx="12" cy="11" r="1.1" fill="currentColor"/>
+          <circle cx="16" cy="11" r="1.1" fill="currentColor"/>
+        </svg>
+        <span class="text-[11px] font-medium">ÖV-Assistent</span>
+      </router-link>
+
+      <router-link
         to="/trip"
         class="flex flex-col items-center justify-center flex-1 h-[46px] gap-0.5 transition-colors"
         :class="route.path === '/trip' ? 'text-ios-blue' : 'text-ios-secondary'"

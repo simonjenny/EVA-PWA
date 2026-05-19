@@ -1,11 +1,47 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue'
 import { useSettingsStore } from '../stores/settings.js'
+import { useAssistantStore } from '../stores/assistant.js'
 import { searchStops, getAvailableLines } from '../services/efa.js'
+import { fetchToolCapableModels } from '../services/openrouter.js'
 import { getLineStyle } from '../utils/lineColors.js'
 import QRCode from 'qrcode'
 
 const store = useSettingsStore()
+const assistantStore = useAssistantStore()
+
+// ─── ÖV-Assistent Settings ──────────────────────────────
+const apiKeyInput = ref(assistantStore.openrouterApiKey)
+const showApiKey = ref(false)
+const availableModels = ref([])
+const modelsLoading = ref(false)
+const modelsError = ref(null)
+
+watch(apiKeyInput, (val) => {
+  assistantStore.setApiKey(val)
+  availableModels.value = []
+  modelsError.value = null
+})
+
+async function loadModels() {
+  if (!apiKeyInput.value.trim()) return
+  modelsLoading.value = true
+  modelsError.value = null
+  try {
+    availableModels.value = await fetchToolCapableModels(apiKeyInput.value.trim())
+    if (availableModels.value.length > 0 && !assistantStore.openrouterModel) {
+      assistantStore.setModel(availableModels.value[0].id)
+    }
+  } catch (e) {
+    modelsError.value = 'Modelle konnten nicht geladen werden – API Key prüfen'
+  } finally {
+    modelsLoading.value = false
+  }
+}
+
+onMounted(() => {
+  if (assistantStore.openrouterApiKey) loadModels()
+})
 
 async function forceReload() {
   if ('serviceWorker' in navigator) {
@@ -242,6 +278,84 @@ function increaseMaxDepartures() {
           />
         </button>
       </div>
+    </div>
+
+    <!-- ══ SEKTION: ÖV-ASSISTENT ══ -->
+    <p class="text-xs font-semibold text-ios-secondary uppercase tracking-wide px-1 mb-2">ÖV-Assistent</p>
+    <div class="bg-white dark:bg-ios-dark-card rounded-2xl overflow-hidden mb-6" style="box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+
+      <!-- API Key -->
+      <div class="px-4 py-3 border-b border-gray-100 dark:border-ios-dark-separator">
+        <p class="text-xs font-medium text-ios-secondary uppercase tracking-wide">OpenRouter API Key</p>
+      </div>
+      <div class="px-3 py-3 border-b border-gray-100 dark:border-ios-dark-separator">
+        <div class="flex items-center gap-2 bg-ios-gray dark:bg-ios-dark-elevated rounded-xl px-3 py-2">
+          <input
+            v-model="apiKeyInput"
+            :type="showApiKey ? 'text' : 'password'"
+            placeholder="sk-or-…"
+            class="flex-1 bg-transparent text-ios-dark dark:text-white outline-none placeholder-ios-secondary font-mono"
+            style="font-size: 15px;"
+            autocomplete="off" autocorrect="off" spellcheck="false"
+            @blur="loadModels"
+          />
+          <button @click="showApiKey = !showApiKey" class="text-ios-secondary flex-shrink-0 active:opacity-60">
+            <svg v-if="showApiKey" width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+              <path d="M1 1l22 22" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+            </svg>
+            <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="1.75"/>
+              <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.75"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Modell-Auswahl -->
+      <div class="px-4 py-3 border-b border-gray-100 dark:border-ios-dark-separator">
+        <p class="text-xs font-medium text-ios-secondary uppercase tracking-wide">Modell</p>
+      </div>
+      <div class="px-4 py-3 border-b border-gray-100 dark:border-ios-dark-separator">
+        <div v-if="!apiKeyInput.trim()" class="text-sm text-ios-secondary">API Key eingeben um Modelle zu laden.</div>
+        <div v-else-if="modelsLoading" class="flex items-center gap-2 text-sm text-ios-secondary">
+          <svg class="animate-spin w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+          </svg>
+          Modelle werden geladen…
+        </div>
+        <div v-else-if="modelsError" class="text-sm text-red-500">{{ modelsError }}</div>
+        <div v-else-if="availableModels.length > 0">
+          <select
+            :value="assistantStore.openrouterModel"
+            @change="assistantStore.setModel($event.target.value)"
+            class="w-full bg-ios-gray dark:bg-ios-dark-elevated text-ios-dark dark:text-white text-sm rounded-xl px-3 py-2.5 outline-none"
+          >
+            <option v-for="m in availableModels" :key="m.id" :value="m.id">{{ m.name }}</option>
+          </select>
+        </div>
+        <div v-else class="flex items-center gap-2">
+          <span class="text-sm text-ios-secondary flex-1">{{ assistantStore.openrouterModel || 'Kein Modell ausgewählt' }}</span>
+          <button @click="loadModels" class="text-sm text-ios-blue font-medium active:opacity-60">Laden</button>
+        </div>
+      </div>
+
+      <!-- Verlauf löschen -->
+      <button
+        @click="assistantStore.clearHistory()"
+        :disabled="assistantStore.chatHistory.length === 0"
+        class="w-full flex items-center px-4 py-3.5 active:bg-ios-gray dark:active:bg-ios-dark-elevated text-left gap-3 disabled:opacity-40"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" class="text-red-500 flex-shrink-0">
+          <polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+          <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+          <path d="M9 6V4h6v2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="text-sm font-medium text-red-500">Chatverlauf löschen</span>
+        <span v-if="assistantStore.chatHistory.length > 0" class="ml-auto text-xs text-ios-secondary">{{ assistantStore.chatHistory.length }} Nachrichten</span>
+      </button>
     </div>
 
     <!-- ══ SEKTION: REISEPLANER ══ -->
