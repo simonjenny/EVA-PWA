@@ -420,7 +420,7 @@ onMounted(scrollToBottom)
     </div>
 
     <!-- Eingabe -->
-    <div v-if="hasApiKey" @touchmove.stop class="bg-white dark:bg-ios-dark-card border-t border-ios-separator dark:border-ios-dark-separator px-3 py-2 flex gap-2 items-end">
+    <div v-if="hasApiKey" class="bg-white dark:bg-ios-dark-card border-t border-ios-separator dark:border-ios-dark-separator px-3 py-2 flex gap-2 items-end" style="touch-action:none;">
       <textarea
         v-model="inputText"
         @keydown="onKeydown"
@@ -428,7 +428,7 @@ onMounted(scrollToBottom)
         placeholder="Nachricht eingeben…"
         rows="1"
         class="flex-1 bg-ios-secondary dark:bg-ios-dark rounded-2xl px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder-ios-gray resize-none outline-none leading-relaxed disabled:opacity-50"
-        style="max-height:120px;overflow-y:auto;"
+        style="max-height:120px;overflow-y:auto;touch-action:pan-y;"
         @input="e => { e.target.style.height='auto'; e.target.style.height=Math.min(e.target.scrollHeight,120)+'px' }"
       />
       <button
