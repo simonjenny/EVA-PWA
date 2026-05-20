@@ -420,7 +420,7 @@ onMounted(scrollToBottom)
     </div>
 
     <!-- Eingabe -->
-    <div v-if="hasApiKey" class="bg-white dark:bg-ios-dark-card border-t border-ios-separator dark:border-ios-dark-separator px-3 py-2 flex gap-2 items-end">
+    <div v-if="hasApiKey" @touchmove.stop class="bg-white dark:bg-ios-dark-card border-t border-ios-separator dark:border-ios-dark-separator px-3 py-2 flex gap-2 items-end">
       <textarea
         v-model="inputText"
         @keydown="onKeydown"
