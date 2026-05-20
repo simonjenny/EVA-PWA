@@ -3,7 +3,7 @@ import { ref, nextTick, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAssistantStore } from '../stores/assistant.js'
 import { sendMessage } from '../services/openrouter.js'
-import { searchStops, getDepartures, planTrip, getDisruptions } from '../services/efa.js'
+import { searchStops, getDepartures, planTrip, getDisruptions, findNearestStop } from '../services/efa.js'
 import { getLineStyle } from '../utils/lineColors.js'
 import { useSettingsStore } from '../stores/settings.js'
 
@@ -23,7 +23,18 @@ const homeStopHint = homeStop
   ? `Die Heimhaltestelle des Benutzers ist "${homeStop.stopName}" (Stop-ID: ${homeStop.stopId}). Wenn der Benutzer "nach Hause", "heimwärts" oder Ähnliches schreibt, verwende diese Stop-ID direkt ohne search_stops aufzurufen.`
   : 'Der Benutzer hat keine Heimhaltestelle konfiguriert.'
 
-const SYSTEM_PROMPT = `Du bist ein ÖV-Assistent für das BVB-Netz Basel. Antworte immer auf Deutsch, kurz und direkt. Nutze Tools für aktuelle Daten – erfinde keine. Suche zuerst Haltestellen-IDs via search_stops. Liste max. 5 Abfahrten auf. Kein ausschweifendes Fazit. Keine nummerierten Listen – verwende einfache Aufzählungspunkte (- ). Bei Verbindungen: Schreibe nur einen kurzen einleitenden Satz (z.B. "Hier sind deine Möglichkeiten:" oder "Das habe ich gefunden:") – die Verbindungsdetails werden separat angezeigt, liste sie nicht auf. ${homeStopHint} Heute: ${new Date().toLocaleDateString('de-CH', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}, ${new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })} Uhr.`
+const SYSTEM_PROMPT = `Du bist ein ÖV-Assistent für das BVB-Netz Basel. Antworte immer auf Deutsch, kurz und direkt. Nutze Tools für aktuelle Daten – erfinde keine. Suche zuerst Haltestellen-IDs via search_stops. Liste max. 5 Abfahrten auf. Kein ausschweifendes Fazit. Keine nummerierten Listen – verwende einfache Aufzählungspunkte (- ). Bei Verbindungen: Schreibe nur einen kurzen einleitenden Satz (z.B. "Hier sind deine Möglichkeiten:" oder "Das habe ich gefunden:") – die Verbindungsdetails werden separat angezeigt, liste sie nicht auf. ${homeStopHint} Wenn der Benutzer "von hier", "von meinem Standort" schreibt oder keinen Startort angibt, rufe get_nearest_stop auf um die nächstgelegene Haltestelle zu ermitteln. Heute: ${new Date().toLocaleDateString('de-CH', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}, ${new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })} Uhr.`
+
+function getCurrentPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error('Geolocation nicht verfügbar')); return }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      () => reject(new Error('Standort konnte nicht ermittelt werden – Zugriff verweigert')),
+      { enableHighAccuracy: false, maximumAge: 60000, timeout: 10000 }
+    )
+  })
+}
 
 const EFA_TOOLS = [
   {
@@ -76,6 +87,14 @@ const EFA_TOOLS = [
     function: {
       name: 'get_disruptions',
       description: 'Gibt aktuelle Störungen und Baustellen im BVB-Netz zurück.',
+      parameters: { type: 'object', properties: {}, required: [] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_nearest_stop',
+      description: 'Ermittelt den aktuellen GPS-Standort des Benutzers und gibt die nächstgelegene Haltestelle zurück. Verwende dieses Tool wenn der Benutzer "von hier", "von meinem Standort" schreibt oder keine Starthaltestelle nennt.',
       parameters: { type: 'object', properties: {}, required: [] }
     }
   }
@@ -141,6 +160,12 @@ async function executeTool(name, args) {
     return results
   }
   if (name === 'get_disruptions') return await getDisruptions()
+  if (name === 'get_nearest_stop') {
+    const { lat, lon } = await getCurrentPosition()
+    const stop = await findNearestStop(lat, lon)
+    if (!stop) throw new Error('Keine Haltestelle in der Nähe gefunden.')
+    return stop
+  }
   throw new Error(`Unbekanntes Tool: ${name}`)
 }
 
@@ -277,32 +302,34 @@ onMounted(scrollToBottom)
 <template>
   <div class="flex flex-col bg-ios-secondary dark:bg-ios-dark" style="height: calc(100dvh - 70px);">
 
-    <!-- Header -->
-    <div class="px-4" style="padding-top: calc(env(safe-area-inset-top, 0px) + 16px); padding-bottom: 16px;">
-      <h1 class="text-3xl font-bold text-ios-dark dark:text-white tracking-tight">ÖV-Assistent</h1>
-    </div>
+    <!-- Unified scroll container: header + content scroll together -->
+    <div ref="messagesEl" class="flex-1 overflow-y-auto">
 
-    <!-- Kein API Key -->
-    <div v-if="!hasApiKey" class="flex-1 flex flex-col items-center justify-center px-6 text-center gap-4">
-      <div class="w-16 h-16 rounded-full bg-ios-blue/10 flex items-center justify-center">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" class="text-ios-blue">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="currentColor"/>
-        </svg>
+      <!-- Header -->
+      <div class="px-4" style="padding-top: calc(env(safe-area-inset-top, 0px) + 16px); padding-bottom: 16px;">
+        <h1 class="text-3xl font-bold text-ios-dark dark:text-white tracking-tight">ÖV-Assistent</h1>
       </div>
-      <div>
-        <p class="text-gray-900 dark:text-white font-medium text-lg">API Key fehlt</p>
-        <p class="text-ios-gray text-sm mt-1">Bitte OpenRouter API Key und Modell in den Einstellungen konfigurieren.</p>
+
+      <!-- Kein API Key -->
+      <div v-if="!hasApiKey" class="flex flex-col items-center justify-center px-6 text-center gap-4 py-20">
+        <div class="w-16 h-16 rounded-full bg-ios-blue/10 flex items-center justify-center">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" class="text-ios-blue">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="currentColor"/>
+          </svg>
+        </div>
+        <div>
+          <p class="text-gray-900 dark:text-white font-medium text-lg">API Key fehlt</p>
+          <p class="text-ios-gray text-sm mt-1">Bitte OpenRouter API Key und Modell in den Einstellungen konfigurieren.</p>
+        </div>
+        <button @click="router.push('/settings')" class="bg-ios-blue text-white px-6 py-2.5 rounded-full font-medium active:opacity-80">
+          Zu den Einstellungen
+        </button>
       </div>
-      <button @click="router.push('/settings')" class="bg-ios-blue text-white px-6 py-2.5 rounded-full font-medium active:opacity-80">
-        Zu den Einstellungen
-      </button>
-    </div>
 
-    <!-- Chat -->
-    <template v-else>
-      <div ref="messagesEl" class="flex-1 overflow-y-auto px-4 py-2 space-y-3">
+      <!-- Chat -->
+      <div v-else class="px-4 py-2 space-y-3">
 
-        <div v-if="store.chatHistory.length === 0" class="flex flex-col items-center justify-center h-full gap-3 text-center">
+        <div v-if="store.chatHistory.length === 0" class="flex flex-col items-center justify-center py-20 gap-3 text-center">
           <div class="w-14 h-14 rounded-full bg-ios-blue/10 flex items-center justify-center">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" class="text-ios-blue">
               <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" fill="currentColor"/>
@@ -390,29 +417,30 @@ onMounted(scrollToBottom)
         </div>
       </div>
 
-      <!-- Eingabe -->
-      <div class="bg-white dark:bg-ios-dark-card border-t border-ios-separator dark:border-ios-dark-separator px-3 py-2 flex gap-2 items-end">
-        <textarea
-          v-model="inputText"
-          @keydown="onKeydown"
-          :disabled="loading"
-          placeholder="Nachricht eingeben…"
-          rows="1"
-          class="flex-1 bg-ios-secondary dark:bg-ios-dark rounded-2xl px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder-ios-gray resize-none outline-none leading-relaxed disabled:opacity-50"
-          style="max-height:120px;overflow-y:auto;"
-          @input="e => { e.target.style.height='auto'; e.target.style.height=Math.min(e.target.scrollHeight,120)+'px' }"
-        />
-        <button
-          @click="send"
-          :disabled="!inputText.trim() || loading"
-          class="w-9 h-9 rounded-full bg-ios-blue flex items-center justify-center flex-shrink-0 transition-opacity disabled:opacity-40 active:opacity-70 mb-0.5"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" class="text-white -rotate-90">
-            <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8-8-8z" fill="currentColor"/>
-          </svg>
-        </button>
-      </div>
-    </template>
+    </div>
+
+    <!-- Eingabe -->
+    <div v-if="hasApiKey" class="bg-white dark:bg-ios-dark-card border-t border-ios-separator dark:border-ios-dark-separator px-3 py-2 flex gap-2 items-end">
+      <textarea
+        v-model="inputText"
+        @keydown="onKeydown"
+        :disabled="loading"
+        placeholder="Nachricht eingeben…"
+        rows="1"
+        class="flex-1 bg-ios-secondary dark:bg-ios-dark rounded-2xl px-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder-ios-gray resize-none outline-none leading-relaxed disabled:opacity-50"
+        style="max-height:120px;overflow-y:auto;"
+        @input="e => { e.target.style.height='auto'; e.target.style.height=Math.min(e.target.scrollHeight,120)+'px' }"
+      />
+      <button
+        @click="send"
+        :disabled="!inputText.trim() || loading"
+        class="w-9 h-9 rounded-full bg-ios-blue flex items-center justify-center flex-shrink-0 transition-opacity disabled:opacity-40 active:opacity-70 mb-0.5"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" class="text-white -rotate-90">
+          <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8-8-8z" fill="currentColor"/>
+        </svg>
+      </button>
+    </div>
 
   </div>
 </template>
