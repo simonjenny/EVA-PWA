@@ -300,10 +300,10 @@ onMounted(scrollToBottom)
 </script>
 
 <template>
-  <div class="flex flex-col bg-ios-secondary dark:bg-ios-dark" style="height: calc(100dvh - 70px);">
+  <div class="flex flex-col overflow-hidden bg-ios-secondary dark:bg-ios-dark" style="height: calc(100dvh - 70px);">
 
     <!-- Unified scroll container: header + content scroll together -->
-    <div ref="messagesEl" class="flex-1 overflow-y-auto">
+    <div ref="messagesEl" class="flex-1 overflow-y-auto overscroll-y-contain">
 
       <!-- Header -->
       <div class="px-4" style="padding-top: calc(env(safe-area-inset-top, 0px) + 16px); padding-bottom: 16px;">
