@@ -2,6 +2,7 @@ const BASE_URL = 'https://openrouter.ai/api/v1'
 
 export async function fetchToolCapableModels(apiKey) {
   const res = await fetch(`${BASE_URL}/models`, {
+    signal: AbortSignal.timeout(10000),
     headers: { Authorization: `Bearer ${apiKey}` }
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -20,6 +21,7 @@ export async function sendMessage(apiKey, model, messages, tools) {
   }
 
   const res = await fetch(`${BASE_URL}/chat/completions`, {
+    signal: AbortSignal.timeout(30000),
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,

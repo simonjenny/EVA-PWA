@@ -15,6 +15,7 @@ const inputText = ref('')
 const loading = ref(false)
 const error = ref(null)
 const messagesEl = ref(null)
+const lastFailedMessages = ref(null)
 
 const hasApiKey = computed(() => !!store.openrouterApiKey && !!store.openrouterModel)
 
@@ -240,24 +241,9 @@ async function scrollToBottom() {
   if (messagesEl.value) messagesEl.value.scrollTop = messagesEl.value.scrollHeight
 }
 
-async function send() {
-  const text = inputText.value.trim()
-  if (!text || loading.value || !hasApiKey.value) return
-
-  inputText.value = ''
-  error.value = null
-  pendingTrips = []
-  store.addMessage({ role: 'user', content: text })
-  loading.value = true
-  await scrollToBottom()
-
+async function sendRequest(apiMessages) {
   try {
-    const apiMessages = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...store.chatHistory.map(m => ({ role: m.role, content: m.content }))
-    ]
-
-    let choice = await sendMessage(store.openrouterApiKey, store.openrouterModel, apiMessages, EFA_TOOLS)
+let choice = await sendMessage(store.openrouterApiKey, store.openrouterModel, apiMessages, EFA_TOOLS)
 
     let iterations = 0
     while (choice?.finish_reason === 'tool_calls' && choice.message?.tool_calls?.length && iterations < 5) {
@@ -283,13 +269,42 @@ async function send() {
         trips: pendingTrips.length ? [...pendingTrips] : undefined
       })
     }
+    lastFailedMessages.value = null
   } catch (e) {
-    error.value = e.message
+    lastFailedMessages.value = apiMessages
+    error.value = e.name === 'TimeoutError' ? 'Zeitüberschreitung – bitte erneut versuchen.' : e.message
   } finally {
     loading.value = false
     pendingTrips = []
     await scrollToBottom()
   }
+}
+
+async function send() {
+  const text = inputText.value.trim()
+  if (!text || loading.value || !hasApiKey.value) return
+
+  inputText.value = ''
+  error.value = null
+  pendingTrips = []
+  store.addMessage({ role: 'user', content: text })
+  loading.value = true
+  await scrollToBottom()
+
+  const apiMessages = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    ...store.chatHistory.map(m => ({ role: m.role, content: m.content }))
+  ]
+  await sendRequest(apiMessages)
+}
+
+async function retry() {
+  if (!lastFailedMessages.value || loading.value) return
+  error.value = null
+  pendingTrips = []
+  loading.value = true
+  await scrollToBottom()
+  await sendRequest(lastFailedMessages.value)
 }
 
 function onKeydown(e) {
@@ -411,8 +426,11 @@ onMounted(scrollToBottom)
         </div>
 
         <div v-if="error" class="flex justify-start">
-          <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-2.5 rounded-2xl rounded-bl-md text-sm text-red-600 dark:text-red-400 max-w-[88%]">
-            {{ error }}
+          <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-2.5 rounded-2xl rounded-bl-md text-sm text-red-600 dark:text-red-400 max-w-[88%] flex flex-col gap-2">
+            <span>{{ error }}</span>
+            <button v-if="lastFailedMessages" @click="retry" class="text-xs font-semibold underline self-start active:opacity-60">
+              Erneut versuchen
+            </button>
           </div>
         </div>
       </div>
