@@ -300,7 +300,7 @@ onMounted(scrollToBottom)
 </script>
 
 <template>
-  <div class="flex flex-col overflow-hidden bg-ios-secondary dark:bg-ios-dark" style="height: calc(100dvh - 70px);">
+  <div class="flex flex-col bg-ios-secondary dark:bg-ios-dark" style="position:fixed;top:0;left:0;right:0;bottom:70px;overflow:hidden;">
 
     <!-- Unified scroll container: header + content scroll together -->
     <div ref="messagesEl" class="flex-1 overflow-y-auto overscroll-y-contain">
